@@ -89,11 +89,16 @@ namespace
     {
         using namespace std;
 
-        if(tok.size() == 1 && tok[0] >= 'A' && tok[0] <= 'Z') {
+        if(tok[0] >= 'A' && tok[0] <= 'Z') {
             cout << "add $" << reg << ", $" << (tok[0] - 'A' + 1) << ", $0\n";
         } else {
             cout << "lis $" << reg << "\n";
             cout << ".word " << stoi(tok) << "\n"; 
+        }
+
+        if(reg > 29) {
+            cerr << "Arithmetic expression is too long. Out of registers.\n";
+            return;
         }
 
         // TODO(Apaar): Support arbitrary whitespace between operand and operator
@@ -253,7 +258,7 @@ namespace
 
             // Make room for the string on the stack
             cout << "lis $27\n";
-            cout << ".word " << maxInputSize << "\n";
+            cout << ".word " << maxInputSize * 4 << "\n";
             cout << "sub $30, $30, $27\n";
             cout << "add $27, $30, $0\n";
 
@@ -263,6 +268,7 @@ namespace
             cout << "add $" << reg << ", $30, $0\n";
 
             auto startLabel = UniqueLabel();
+            auto endLabel = UniqueLabel();
 
             cout << startLabel << ":\n";
 
@@ -274,20 +280,22 @@ namespace
             // If the character we just read is newline, then stop the loop
             cout << "lis $28\n";
             cout << ".word 10\n"; 
-            cout << "beq $29, $28, 7\n";
+            cout << "beq $29, $28, " << endLabel << "\n";
 
             // Store the character into the string buffer
             cout << "sw $29, 0($27)\n";
 
             // Move the pointer forward
             cout << "lis $28\n";
-            cout << ".word 1\n";
+            cout << ".word 4\n";
             cout << "add $27, $27, $28\n";
 
             // Hop back to the start of the loop
             cout << "lis $28\n";
             cout << ".word " << startLabel << "\n";
             cout << "jr $28\n";
+
+            cout << endLabel << ":\n";
 
             // Store null terminator
             cout << "sw $0, 0($27)\n";
@@ -311,7 +319,7 @@ namespace
                 cout << ".word 1\n";
 
                 cout << "lis $28\n";
-                cout << ".word 1\n";
+                cout << ".word 4\n";
                 cout << "sub $27, $27, $28\n";
                 cout << "add $25, $0, $0\n";
 
@@ -320,9 +328,10 @@ namespace
                 cout << startLabel << ":\n";
 
                 // We work backwards from behind the null-terminator
+                cout << "lw $29, 0($27)\n";
+                    
                 cout << "lis $28\n";
                 cout << ".word 45\n";   // minus (-)
-                cout << "lw $29, 0($27)\n";
                 
                 auto skipMinusLabel = UniqueLabel();
 
@@ -342,10 +351,18 @@ namespace
                 cout << "mult $29, $26\n";
                 cout << "mflo $29\n";
                 cout << "add $30, $30, $29\n";
+
+                // Hop out if this was the first character in the string
+                cout << "beq $27, $" << reg << ", " << endLabel << "\n";
+                cout << "lis $28\n";
+                cout << ".word 4\n";
+                cout << "sub $27, $27, $28\n";
+
                 cout << "lis $28\n";
                 cout << ".word 10\n";
                 cout << "mult $26, $28\n";
                 cout << "mflo $26\n";
+
                 cout << "lis $28\n";
                 cout << ".word " << startLabel << "\n";
                 cout << "jr $28\n";
@@ -369,6 +386,7 @@ namespace
 
                 if(!cin) {
                     cerr << "Expected 'loop' to close off 'do'.\n";
+                    return;
                 }
             }
 
@@ -377,6 +395,99 @@ namespace
             cout << "jr $27\n";
 
             cin >> tok;
+        } else if(tok == "if") {
+            cin >> tok;
+
+            auto outLabel = UniqueLabel();
+
+            CompileArith(tok, 27);
+
+            if(tok == "$=") {
+                // Compare strings
+                
+                cin >> tok;
+
+                CompileArith(tok, 28);
+
+                const std::vector<int> reserved{30};
+
+                PushRegs(reserved);
+                
+                // Compare strings, if any character is different, set register 27 to 0, else 1
+                
+                auto loopLabel = UniqueLabel();
+                auto diffLabel = UniqueLabel();
+                auto equalLabel = UniqueLabel();
+                auto endLabel = UniqueLabel();
+
+                cout << loopLabel << ":\n";
+                cout << "lw $29, 0($27)\n";
+                cout << "lw $30, 0($28)\n";
+                cout << "bne $29, $30, " << diffLabel << "\n";
+                cout << "lis $29\n";
+                cout << ".word 4\n";
+                cout << "add $27, $27, $29\n";
+                cout << "add $28, $28, $29\n";
+
+                cout << "beq $29, $0, " << equalLabel << "\n";
+
+                cout << "lis $29\n";
+                cout << ".word " << loopLabel << "\n";
+                
+                cout << diffLabel << ":\n";
+                cout << "lis $27\n";
+                cout << ".word 0\n";
+                cout << "lis $28\n";
+                cout << ".word " << endLabel << "\n";
+
+                cout << equalLabel << ":\n";
+                cout << "lis $27\n";
+                cout << ".word 1\n";
+
+                cout << endLabel << ":\n";
+
+                PopRegs(reserved);
+            }
+
+            if(tok != "then") {
+                cerr << "Expected 'then' after 'if' condition.\n";
+                return;
+            }
+
+            outLabel = UniqueLabel();
+            auto elseLabel = UniqueLabel();
+
+            cout << "beq $27, $0, " << elseLabel << "\n";
+
+            cin >> tok;
+
+            while(tok != "else" && tok != "end") {
+                Compile(tok);
+            }
+
+            cout << "lis $28\n";
+            cout << ".word " << outLabel << "\n";
+            cout << "jr $28\n";
+
+            cout << elseLabel << ":\n";
+
+            if(tok == "else") {
+                cin >> tok;
+
+                while(tok != "end") {
+                    Compile(tok);
+                }
+
+                cout << "lis $28\n";
+                cout << ".word " << outLabel << "\n";
+                cout << "jr $28\n";
+
+                cin >> tok;
+            } else {
+                cin >> tok;
+            }
+
+            cout << outLabel << ":\n";
         } else if(tok.size() == 1 && tok[0] >= 'A' && tok[0] <= 'Z') {
             int reg = tok[0] - 'A' + 1;
 
