@@ -158,13 +158,14 @@ namespace
                 cout << "add $27, $" << reg << ", $0\n";
 
                 auto startLabel = UniqueLabel();
+                auto endLabel = UniqueLabel();
 
                 cout << startLabel << ":\n";
 
                 cout << "lw $28, 0($27)\n";
 
                 // Exit the loop if we hit the null-terminator
-                cout << "beq $28, $0, 9\n";
+                cout << "beq $28, $0, " << endLabel << "\n";
 
                 cout << "lis $29\n";
                 cout << ".word 0xffff000c\n";
@@ -172,7 +173,7 @@ namespace
 
                 // Move the character pointer forward
                 cout << "lis $28\n";
-                cout << ".word 1\n";
+                cout << ".word 4\n";
                 cout << "add $27, $27, $28\n";
 
                 // Jump back to the start of the loop
@@ -180,9 +181,11 @@ namespace
                 cout << ".word " << startLabel << "\n";
                 cout << "jr $28\n";
 
+                cout << endLabel << ":\n";
+
                 cout << "lis $28\n";
                 cout << ".word 10\n";
-                cout << "sw $28, 0($27)\n";
+                cout << "sw $28, 0($29)\n";
             } else {
                 cin.putback(ch);
 
@@ -190,6 +193,7 @@ namespace
                 cout << "add $27, $" << reg << ", $0\n";
  
                 auto startLabel = UniqueLabel();
+                auto endLabel = UniqueLabel();
 
                 cout << startLabel << ":\n";
 
@@ -207,11 +211,13 @@ namespace
                 cout << ".word 0xffff000c\n";
                 cout << "sw $28, 0($29)\n";
 
-                cout << "beq $27, $0, 3\n";
+                cout << "beq $27, $0, " << endLabel << "\n";
 
                 cout << "lis $28\n";
                 cout << ".word " << startLabel << "\n";
                 cout << "jr $28\n";
+
+                cout << endLabel << ":\n";
 
                 cout << "lis $27\n";
                 cout << ".word 10\n";
@@ -305,23 +311,25 @@ namespace
                 
                 // TODO(Apaar): Some kind of error checking when reading numbers
                 
-                const vector<int> reserved{26, 30};
+                const vector<int> reserved{25, 26};
 
                 PushRegs(reserved);
 
                 auto endLabel = UniqueLabel();
 
                 // If the length of the string is 0, skip this shit, the resulting number is going to be 0
-                cout << "add $30, $0, $0\n";
+                cout << "add $25, $0, $0\n";
                 cout << "beq $27, $" << reg << ", " << endLabel << "\n";
 
+                // Resulting value in 25
+                // Multiplier in 26
+            
                 cout << "lis $26\n";
                 cout << ".word 1\n";
 
                 cout << "lis $28\n";
                 cout << ".word 4\n";
                 cout << "sub $27, $27, $28\n";
-                cout << "add $25, $0, $0\n";
 
                 startLabel = UniqueLabel();
 
@@ -350,7 +358,7 @@ namespace
                 cout << "sub $29, $29, $28\n";
                 cout << "mult $29, $26\n";
                 cout << "mflo $29\n";
-                cout << "add $30, $30, $29\n";
+                cout << "add $25, $25, $29\n";
 
                 // Hop out if this was the first character in the string
                 cout << "beq $27, $" << reg << ", " << endLabel << "\n";
@@ -369,8 +377,12 @@ namespace
 
                 cout << endLabel << ":\n";
 
-                cout << "add $" << reg << ", $30, $0\n";
+                // Move the result into 27 so that it doesn't get stomped by pop regs
+                cout << "add $27, $25, $0\n";
+
                 PopRegs(reserved);
+
+                cout << "add $" << reg << ", $27, $0\n";
             }
             
             cin >> tok;
@@ -409,7 +421,7 @@ namespace
 
                 CompileArith(tok, 28);
 
-                const std::vector<int> reserved{30};
+                const std::vector<int> reserved{26};
 
                 PushRegs(reserved);
                 
@@ -422,14 +434,15 @@ namespace
 
                 cout << loopLabel << ":\n";
                 cout << "lw $29, 0($27)\n";
-                cout << "lw $30, 0($28)\n";
-                cout << "bne $29, $30, " << diffLabel << "\n";
+                cout << "lw $26, 0($28)\n";
+
+                cout << "bne $29, $26, " << diffLabel << "\n";
+                cout << "beq $29, $0, " << equalLabel << "\n";
+
                 cout << "lis $29\n";
                 cout << ".word 4\n";
                 cout << "add $27, $27, $29\n";
                 cout << "add $28, $28, $29\n";
-
-                cout << "beq $29, $0, " << equalLabel << "\n";
 
                 cout << "lis $29\n";
                 cout << ".word " << loopLabel << "\n";
