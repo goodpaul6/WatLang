@@ -10,7 +10,8 @@ class Parser
     void expectToken(int tok, const std::string& message)
     {
         if(curTok != tok) {
-            throw PosError{pos, message};
+            std::cerr << "tok: " << curTok << "\n";
+            throw PosError{lexer.getPos(), message};
         }
     }
 
@@ -24,7 +25,9 @@ class Parser
     {
         expectToken(TOK_INT, "Expected integer.");
 
-        auto lhs = std::make_unique<IntAST>(lexer.getPos(), lexer.getInt());
+        std::unique_ptr<AST> lhs{new IntAST{lexer.getPos(), lexer.getInt()}};
+
+        curTok = lexer.getToken(s);
 
         while(curTok == '*' || curTok == '/') {
             int op = curTok;
@@ -33,7 +36,7 @@ class Parser
 
             auto rhs = parseFactor(s);
 
-            lhs = std::make_unique<BinAST>(lexer.getPos(), std::move(lhs), std::move(rhs), op);
+            lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -50,7 +53,7 @@ class Parser
 
             auto rhs = parseTerm(s);
 
-            lhs = std::make_unique<BinAST>(lexer.getPos(), std::move(lhs), std::move(rhs), op);
+            lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -61,7 +64,8 @@ class Parser
         expectToken(TOK_ID, "Expected identifier.");
 
         auto pos = lexer.getPos();
-        auto lhs = std::make_unique<IdAST>(lexer.getPos(), lexer.getLexeme());
+
+        std::unique_ptr<AST> lhs{new IdAST{lexer.getPos(), lexer.getLexeme()}};
 
         curTok = lexer.getToken(s);
 
@@ -71,7 +75,7 @@ class Parser
 
         auto rhs = parseTerm(s);
 
-        return std::make_unique<BinAST>(pos, lhs, rhs, '=');
+        return std::make_unique<BinAST>(pos, std::move(lhs), std::move(rhs), '=');
     }
 
 public:

@@ -6,7 +6,7 @@ struct Compiler
     void compile(const std::vector<std::unique_ptr<AST>>& asts, std::ostream& out)
     {
         for(auto& ast : asts) {
-            compileStatement(ast);
+            compileStatement(*ast, out);
         }
     }
 
@@ -22,16 +22,16 @@ private:
     // Returns the register index into which the term's result is stored
     int compileTerm(const AST& ast, std::ostream& out)
     {
-        if(ast.type == INT) {
+        if(ast.getType() == AST::INT) {
             out << "lis $" << curReg++ << "\n";
-            out << ".word " << static_cast<IntAST&>(ast).getValue() << "\n";
+            out << ".word " << static_cast<const IntAST&>(ast).getValue() << "\n";
 
             return curReg - 1;
         }
 
-        assert(ast.type == BIN);
+        assert(ast.getType() == AST::BIN);
 
-        auto& bst = static_cast<BinAST&>(ast);
+        auto& bst = static_cast<const BinAST&>(ast);
 
         int dest = curReg++;
 
@@ -59,9 +59,9 @@ private:
 
     void compileStatement(const AST& ast, std::ostream& out)
     {
-        assert(ast.type == AST::BIN);
+        assert(ast.getType() == AST::BIN);
 
-        compileTerm(ast.getRhs());
+        compileTerm(static_cast<const BinAST&>(ast).getRhs(), out);
         
         // TODO(Apaar): Assign to lhs
     }

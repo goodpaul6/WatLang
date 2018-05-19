@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "lexer.cc"
+#include "error.cc"
 #include "ast.cc"
 #include "parser.cc"
 #include "compiler.cc"
@@ -9,13 +10,17 @@ int main(int argc, char** argv)
 {
     using namespace std;
 
-    Parser parser;
+    try {
+        Parser parser;
 
-    auto asts = parser.parseUntilEof(cin);
+        auto asts = parser.parseUntilEof(cin);
 
-    Compiler compiler;
+        Compiler compiler;
 
-    compiler.compile(asts, cout);
+        compiler.compile(asts, cout);
+    } catch(PosError& e) {
+        cerr << e.getPos().line << ": " << e.getMessage() << "\n";
+    }
 
     return 0;
 }

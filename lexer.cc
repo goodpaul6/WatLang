@@ -92,7 +92,7 @@ struct Lexer
     int getInt() const { return std::stoi(lexeme); }
 
 private:
-    int last = -1;
+    int last = ' ';
     Pos pos{1};
 
     std::string lexeme;
