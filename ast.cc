@@ -43,8 +43,8 @@ struct BinAST : public AST
 {
     BinAST(Pos pos, std::unique_ptr<AST> lhs, std::unique_ptr<AST> rhs, int op) : AST{BIN, pos}, lhs{std::move(lhs)}, rhs{std::move(rhs)}, op{op} {}
 
-    AST& getLhs() { return *lhs; }
-    AST& getRhs() { return *rhs; }
+    const AST& getLhs() const { return *lhs; }
+    const AST& getRhs() const { return *rhs; }
     int getOp() const { return op; }
 
 private:

@@ -78,21 +78,18 @@ struct Lexer
             return TOK_STR;
         }
 
+        if(last == EOF) {
+            return TOK_EOF;
+        }
+
         int lastCh = last;
         last = s.get();
 
         return lastCh;
     }
 
-    void expectToken(int token)
-    {
-        if(getToken() != token) {
-            throw PosError{pos, "Unexpected token."};
-        }
-    }
-
     const std::string& getLexeme() const { return lexeme; }
-    int getInteger() const { return std::stoi(lexeme); }
+    int getInt() const { return std::stoi(lexeme); }
 
 private:
     int last = -1;
