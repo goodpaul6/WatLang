@@ -4,6 +4,9 @@ lis $28
 .word 65
 sw $28, 0($27)
 lis $28
+.word 58
+sw $28, 0($27)
+lis $28
 .word 10
 sw $28, 0($27)
 lis $27
@@ -74,4 +77,27 @@ add $30, $30, $25
 lw $26, -8($30)
 lw $25, -4($30)
 add $1, $27, $0
+add $27, $1, $0
+L5:
+lis $28
+.word 10
+div $27, $28
+mflo $27
+mfhi $29
+lis $28
+.word 48
+add $28, $28, $29
+lis $29
+.word 0xffff000c
+sw $28, 0($29)
+beq $27, $0, L6
+lis $28
+.word L5
+jr $28
+L6:
+lis $27
+.word 10
+lis $28
+.word 0xffff000c
+sw $27, 0($28)
 jr $31
