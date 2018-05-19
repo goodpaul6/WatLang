@@ -1,5 +1,6 @@
 #include <ostream>
 #include <cassert>
+#include <unordered_map>
 
 struct Compiler
 {
@@ -8,12 +9,14 @@ struct Compiler
         for(auto& ast : asts) {
             compileStatement(*ast, out);
         }
+
+        out << "jr $31\n";
     }
 
 private:
     int curReg = 1;
     int labelIndex = 0;
-    
+ 
     std::string uniqueLabel()
     {
         return "L" + std::to_string(labelIndex++);
@@ -61,8 +64,10 @@ private:
     {
         assert(ast.getType() == AST::BIN);
 
-        compileTerm(static_cast<const BinAST&>(ast).getRhs(), out);
-        
-        // TODO(Apaar): Assign to lhs
+        auto& bst = static_cast<const BinAST&>(ast);
+
+        compileTerm(bst.getRhs(), out);
+
+        auto& name = static_cast<const IdAST&>(bst.getLhs()).getName();
     }
 };

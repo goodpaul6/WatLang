@@ -10,7 +10,6 @@ class Parser
     void expectToken(int tok, const std::string& message)
     {
         if(curTok != tok) {
-            std::cerr << "tok: " << curTok << "\n";
             throw PosError{lexer.getPos(), message};
         }
     }
