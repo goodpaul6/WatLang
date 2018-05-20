@@ -58,7 +58,7 @@ class Parser
     {
         auto lhs = parseFactor(table, s);
 
-        while(curTok == '+' || curTok == '/') {
+        while(curTok == '+' || curTok == '-') {
             int op = curTok;
 
             curTok = lexer.getToken(s);
@@ -148,6 +148,19 @@ class Parser
             }
 
             return std::unique_ptr<AST>{new IfAST{pos, std::move(cond), std::move(body), std::move(alt)}};
+        } else if(curTok == TOK_WHILE) {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            eatToken(s, '(', "Expected '(' after 'if'.");
+
+            auto cond = parseRelation(table, s);
+
+            eatToken(s, ')', "Expected ')' after 'if'.");
+
+            auto body = parseStatement(table, s);
+
+            return std::unique_ptr<AST>{new WhileAST{pos, std::move(cond), std::move(body)}};
         } else {
             throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
         }

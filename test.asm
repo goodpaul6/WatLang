@@ -1,31 +1,33 @@
-; globals
 lis $1
 .word L0
 jr $1
-.word 0
+; globals
 .word 0
 L0:
 ; code
-lis $2
+lis $1
 .word 10
-lis $4
-.word 20
-lis $5
-.word 30
-mult $4, $5
-mflo $3
-mult $2, $3
-mflo $1
 ; storing into x
-sw $1, 0($0)
-lw $3, 0($0)
-lis $4
-.word 10
-mult $3, $4
-mflo $2
+sw $1, 12($0)
+L1:
+lw $2, 12($0)
 lis $3
-.word 5
-add $1, $2, $3
-; storing into y
-sw $1, 4($0)
+.word 0
+slt $1, $2, $3
+lis $4
+.word 1
+sub $1, $4, $1
+bne $2, $3, 1
+add $1, $0, $0
+beq $1, $0, L2
+lw $3, 12($0)
+lis $4
+.word 1
+sub $2, $3, $4
+; storing into x
+sw $2, 12($0)
+lis $2
+.word L1
+jr $2
+L2:
 jr $31

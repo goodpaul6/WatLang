@@ -8,7 +8,8 @@ struct AST
         ID,
         BIN,
         BLOCK,
-        IF
+        IF,
+        WHILE
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -75,4 +76,15 @@ struct IfAST : public AST
 
 private:
     std::unique_ptr<AST> cond, body, alt;
+};
+
+struct WhileAST : public AST
+{
+    WhileAST(Pos pos, std::unique_ptr<AST> cond, std::unique_ptr<AST> body) : AST{WHILE, pos}, cond{std::move(cond)}, body{std::move(body)} {}
+
+    const AST& getCond() const { return *cond; }
+    const AST& getBody() const { return *body; }
+
+private:
+    std::unique_ptr<AST> cond, body;
 };

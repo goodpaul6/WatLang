@@ -34,15 +34,15 @@ private:
     // Makes room for symbols and sets their location values
     void resolveSymbolLocations(SymbolTable& table, std::ostream& out)
     {
-        auto i = 0u;
-
-        out << "; globals\n";
-
         auto startLabel = uniqueLabel();
 
         out << "lis $1\n";
         out << ".word " << startLabel << "\n";
         out << "jr $1\n";
+
+        out << "; globals\n";
+
+        auto i = 12u;
 
         for(auto& v : table.globals) {
             out << ".word 0\n";
@@ -245,6 +245,32 @@ private:
                 out << altLabel << ":\n";
                 compileStatement(table, *ist.getAlt(), out);
             }
+
+            out << endLabel << ":\n";
+        } else if(ast.getType() == AST::WHILE) {
+            auto& ist = static_cast<const WhileAST&>(ast);
+
+            int prevReg = curReg;
+
+            auto condLabel = uniqueLabel();
+
+            out << condLabel << ":\n";
+
+            int cond = compileRelation(table, ist.getCond(), out);
+
+            auto endLabel = uniqueLabel();
+
+            out << "beq $" << cond << ", $0, " << endLabel << "\n";
+
+            compileStatement(table, ist.getBody(), out);
+
+            int temp = curReg++;
+
+            out << "lis $" << temp << "\n";
+            out << ".word " << condLabel << "\n";
+            out << "jr $" << temp << "\n";
+
+            curReg = prevReg;
 
             out << endLabel << ":\n";
         } else {
