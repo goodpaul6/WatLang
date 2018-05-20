@@ -6,7 +6,9 @@ struct AST
     {
         INT,
         ID,
-        BIN
+        BIN,
+        BLOCK,
+        IF
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -51,4 +53,26 @@ struct BinAST : public AST
 private:
     std::unique_ptr<AST> lhs, rhs;
     int op;
+};
+
+struct BlockAST : public AST
+{
+    BlockAST(Pos pos, std::vector<std::unique_ptr<AST>> asts) : AST{BLOCK, pos}, asts{std::move(asts)} {}
+
+    const std::vector<std::unique_ptr<AST>>& getAsts() const { return asts; }
+
+private:
+    std::vector<std::unique_ptr<AST>> asts;
+};
+
+struct IfAST : public AST
+{
+    IfAST(Pos pos, std::unique_ptr<AST> cond, std::unique_ptr<AST> body, std::unique_ptr<AST> alt) : AST{IF, pos}, cond{std::move(cond)}, body{std::move(body)}, alt{std::move(alt)} {}
+
+    const AST& getCond() const { return *cond; }
+    const AST& getBody() const { return *body; }
+    const AST* getAlt() const { return alt.get(); }
+
+private:
+    std::unique_ptr<AST> cond, body, alt;
 };

@@ -14,7 +14,10 @@ enum Token
     TOK_ID = -8,
     TOK_INT = -9,
     TOK_STR = -10,
-    TOK_EOF = -11
+    TOK_EQUALS = -11,
+    TOK_LTE = -12,
+    TOK_GTE = -13,
+    TOK_EOF = -14
 };
 
 struct Pos
@@ -84,6 +87,21 @@ struct Lexer
 
         int lastCh = last;
         last = s.get();
+
+        if(lastCh == '=' && last == '=') {
+            last = s.get();
+            return TOK_EQUALS;
+        }
+
+        if(lastCh == '<' && last == '=') {
+            last = s.get();
+            return TOK_LTE;
+        }
+
+        if(lastCh == '>' && last == '=') {
+            last = s.get();
+            return TOK_GTE;
+        }
 
         return lastCh;
     }

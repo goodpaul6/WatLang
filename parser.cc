@@ -65,7 +65,25 @@ class Parser
 
             auto rhs = parseTerm(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+        }
+
+        return lhs;
+    }
+
+    std::unique_ptr<AST> parseRelation(SymbolTable& table, std::istream& s)
+    {
+        auto lhs = parseTerm(table, s);
+
+        // Unlike terms, relations are limited to a single binary expression
+        if(curTok == '<' || curTok == '>' || curTok == TOK_EQUALS || curTok == TOK_LTE || curTok == TOK_GTE) {
+            int op = curTok;
+
+            curTok = lexer.getToken(s);
+
+            auto rhs = parseTerm(table, s);
+
+            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -73,23 +91,66 @@ class Parser
 
     std::unique_ptr<AST> parseStatement(SymbolTable& table, std::istream& s)
     {
-        expectToken(TOK_ID, "Expected identifier.");
+        if(curTok == '{') {
+            auto pos = lexer.getPos();
 
-        auto pos = lexer.getPos();
+            std::vector<std::unique_ptr<AST>> asts;
 
-        table.declVar(lexer.getPos(), lexer.getLexeme(), nullptr);
+            curTok = lexer.getToken(s);
 
-        std::unique_ptr<AST> lhs{new IdAST{lexer.getPos(), lexer.getLexeme()}};
+            while(curTok != '}') {
+                asts.emplace_back(std::move(parseStatement(table, s)));
+            }
 
-        curTok = lexer.getToken(s);
+            curTok = lexer.getToken(s);
 
-        expectToken('=', "Expected '=' after identifier.");
+            return std::unique_ptr<AST>{new BlockAST{pos, std::move(asts)}};
+        } else if(curTok == TOK_VAR || curTok == TOK_ID) {
+            if(curTok == TOK_VAR) {
+                curTok = lexer.getToken(s);
 
-        curTok = lexer.getToken(s);
+                expectToken(TOK_ID, "Expected identifier after 'var'.\n");
 
-        auto rhs = parseTerm(table, s);
+                auto pos = lexer.getPos();
 
-        return std::make_unique<BinAST>(pos, std::move(lhs), std::move(rhs), '=');
+                table.declVar(lexer.getPos(), lexer.getLexeme(), nullptr);
+            }
+
+            std::unique_ptr<AST> lhs{new IdAST{lexer.getPos(), lexer.getLexeme()}};
+
+            curTok = lexer.getToken(s);
+
+            expectToken('=', "Expected '=' after identifier.");
+
+            curTok = lexer.getToken(s);
+
+            auto rhs = parseTerm(table, s);
+
+            return std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), '='}};
+        } else if(curTok == TOK_IF) {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            eatToken(s, '(', "Expected '(' after 'if'.");
+
+            auto cond = parseRelation(table, s);
+
+            eatToken(s, ')', "Expected ')' after 'if'.");
+
+            auto body = parseStatement(table, s);
+
+            std::unique_ptr<AST> alt;
+
+            if(curTok == TOK_ELSE) {
+                curTok = lexer.getToken(s);
+
+                alt = parseStatement(table, s);
+            }
+
+            return std::unique_ptr<AST>{new IfAST{pos, std::move(cond), std::move(body), std::move(alt)}};
+        } else {
+            throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
+        }
     }
 
 public:
