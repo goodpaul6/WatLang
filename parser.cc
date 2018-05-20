@@ -6,6 +6,7 @@ class Parser
 {
     Lexer lexer;
     int curTok = 0;
+    Func* curFunc = nullptr;
 
     void expectToken(int tok, const std::string& message)
     {
@@ -20,11 +21,23 @@ class Parser
         curTok = lexer.getToken(s);
     }
 
-    std::unique_ptr<AST> parseFactor(std::istream& s)
+    std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
     {
-        expectToken(TOK_INT, "Expected integer.");
-
-        std::unique_ptr<AST> lhs{new IntAST{lexer.getPos(), lexer.getInt()}};
+        std::unique_ptr<AST> lhs;
+        
+        if(curTok == TOK_INT) {
+            lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
+        } else if(curTok == TOK_ID) {
+            auto var = table.getVar(lexer.getLexeme(), curFunc);
+            
+            if(!var) {
+                throw PosError{lexer.getPos(), "Referenced undeclared variable " + lexer.getLexeme()};
+            }
+    
+            lhs.reset(new IdAST{lexer.getPos(), lexer.getLexeme()});
+        } else {
+            throw PosError{lexer.getPos(), "Unexpected token."};
+        }
 
         curTok = lexer.getToken(s);
 
@@ -33,7 +46,7 @@ class Parser
 
             curTok = lexer.getToken(s);
 
-            auto rhs = parseFactor(s);
+            auto rhs = parseFactor(table, s);
 
             lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
         }
@@ -41,16 +54,16 @@ class Parser
         return lhs;
     }
 
-    std::unique_ptr<AST> parseTerm(std::istream& s)
+    std::unique_ptr<AST> parseTerm(SymbolTable& table, std::istream& s)
     {
-        auto lhs = parseFactor(s);
+        auto lhs = parseFactor(table, s);
 
         while(curTok == '+' || curTok == '/') {
             int op = curTok;
 
             curTok = lexer.getToken(s);
 
-            auto rhs = parseTerm(s);
+            auto rhs = parseTerm(table, s);
 
             lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
         }
@@ -58,11 +71,13 @@ class Parser
         return lhs;
     }
 
-    std::unique_ptr<AST> parseStatement(std::istream& s)
+    std::unique_ptr<AST> parseStatement(SymbolTable& table, std::istream& s)
     {
         expectToken(TOK_ID, "Expected identifier.");
 
         auto pos = lexer.getPos();
+
+        table.declVar(lexer.getPos(), lexer.getLexeme(), nullptr);
 
         std::unique_ptr<AST> lhs{new IdAST{lexer.getPos(), lexer.getLexeme()}};
 
@@ -72,13 +87,13 @@ class Parser
 
         curTok = lexer.getToken(s);
 
-        auto rhs = parseTerm(s);
+        auto rhs = parseTerm(table, s);
 
         return std::make_unique<BinAST>(pos, std::move(lhs), std::move(rhs), '=');
     }
 
 public:
-    std::vector<std::unique_ptr<AST>> parseUntilEof(std::istream& s)
+    std::vector<std::unique_ptr<AST>> parseUntilEof(SymbolTable& table, std::istream& s)
     {
         lexer = {};
 
@@ -87,7 +102,7 @@ public:
         curTok = lexer.getToken(s);
 
         while(curTok != TOK_EOF) {
-            asts.emplace_back(std::move(parseStatement(s)));
+            asts.emplace_back(std::move(parseStatement(table, s)));
         }
 
         return asts;

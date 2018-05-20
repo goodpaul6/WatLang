@@ -10,6 +10,7 @@ struct AST
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
+    virtual ~AST() {}
 
     Pos getPos() const { return pos; }
     Type getType() const { return type; }
@@ -31,7 +32,7 @@ private:
 
 struct IdAST : public AST
 {
-    IdAST(Pos pos, const std::string& name) : AST{ID, pos}, name{name} {}
+    IdAST(Pos pos, std::string name) : AST{ID, pos}, name{name} {}
 
     const std::string& getName() const { return name; }
 
