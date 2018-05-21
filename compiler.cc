@@ -54,6 +54,20 @@ private:
             i += 4;
         }
 
+        out << "; strings\n";
+
+        for(auto& s : table.strings) {
+            s.loc = i;
+            for(auto ch : s.str) {
+                out << ".word " << (int)ch << "\n";
+                i += 1;
+            }
+
+            // null-terminator
+            out << ".word 0\n";
+            i += 1;
+        }
+
         for(auto& f : table.funcs) {
             auto reg = 1;
 
@@ -184,6 +198,11 @@ private:
             auto& cst = static_cast<const CallAST&>(ast);
 
             return compileCall(table, cst, out);
+        } else if(ast.getType() == AST::STR) {
+            out << "lis $" << curReg++ << "\n";
+            out << ".word " << table.getString(static_cast<const StrAST&>(ast).getId()).loc << "\n";
+
+            return curReg - 1;
         }
 
         assert(ast.getType() == AST::BIN);

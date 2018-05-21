@@ -53,6 +53,11 @@ class Parser
         if(curTok == TOK_INT) {
             lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
             curTok = lexer.getToken(s);
+        } else if(curTok == TOK_STR) {
+            int id = table.internString(lexer.getLexeme());
+            lhs.reset(new StrAST{lexer.getPos(), id});
+
+            curTok = lexer.getToken(s);
         } else if(curTok == TOK_ID) {
             auto pos = lexer.getPos();
             auto name = lexer.getLexeme();

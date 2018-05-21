@@ -5,6 +5,7 @@ struct AST
     enum Type
     {
         INT,
+        STR,
         ID,
         BIN,
         BLOCK,
@@ -35,6 +36,17 @@ struct IntAST : public AST
 
 private:
     int value;
+};
+
+struct StrAST : public AST
+{
+    StrAST(Pos pos, int id) : AST{STR, pos}, id{id} {}
+
+    int getId() const { return id; }
+
+private:
+    int id;
+    size_t length;
 };
 
 struct IdAST : public AST

@@ -4,6 +4,26 @@ func putc(c) {
     asm "sw $1, 0($3)"
 }
 
+func puts(s) {
+    asm "lis $3"
+    asm ".word 0xffff000c"
+
+    asm "lis $5"
+    asm ".word 4"
+
+    asm "putsLoop:"
+    asm "lw $4, 0($1)"
+    asm "beq $4, $0, putsEnd"
+    asm "sw $4, 0($3)"
+    asm "add $1, $1, $5"
+    asm "lis $4"
+    asm ".word putsLoop"
+    asm "jr $4"
+
+    asm "putsEnd:"
+    putc(10)
+}
+
 func putn(n) {
     // Make room on the stack for 20 digits (4 * 20 = 80 bytes)
     asm "lis $3"

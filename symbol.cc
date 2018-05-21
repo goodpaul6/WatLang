@@ -23,6 +23,12 @@ struct Func
     int firstReg; // First unused register (after registers for arguments and locals have been allocated), -1 by default, assigned by compiler
 };
 
+struct CString
+{
+    std::string str;
+    int loc;
+};
+
 struct SymbolTable
 {
     Func& declFunc(Pos pos, std::string name)
@@ -109,9 +115,29 @@ struct SymbolTable
         return nullptr;
     }
 
+    int internString(std::string str)
+    {
+        auto i = 0u;
+        for(auto& s : strings) {
+            if(s.str == str) {
+                return i;
+            }
+            i += 1;
+        }
+
+        strings.emplace_back(CString{std::move(str), -1});
+        return strings.size() - 1;
+    }
+
+    const CString& getString(int id)
+    {
+        return strings[id];
+    }
+
 private:
     friend struct Compiler;
 
     std::vector<Var> globals;
     std::vector<Func> funcs;
+    std::vector<CString> strings;
 };
