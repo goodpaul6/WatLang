@@ -100,7 +100,7 @@ private:
  
         int prev = curReg;
 
-        int temp = curReg++;
+        int temp = 1;
 
         out << "lis $" << temp << "\n";
         out << ".word " << spaceUsed << "\n";

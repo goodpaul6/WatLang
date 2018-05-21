@@ -106,6 +106,15 @@ struct Lexer
             return TOK_GTE;
         }
 
+        if(lastCh == '/' && last == '/') {
+            while(last != '\n') {
+                last = s.get();
+            }
+
+            last = s.get();
+            return getToken(s);
+        }
+
         return lastCh;
     }
 
