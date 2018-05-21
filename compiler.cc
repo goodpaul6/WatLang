@@ -39,9 +39,9 @@ private:
     // Makes room for symbols and sets their location values
     void resolveSymbolLocations(SymbolTable& table, std::ostream& out)
     {
-        out << "lis $1\n";
+        out << "lis $29\n";
         out << ".word main\n";
-        out << "jr $1\n";
+        out << "jr $29\n";
 
         out << "; globals\n";
 
