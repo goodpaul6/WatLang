@@ -9,7 +9,10 @@ struct AST
         BIN,
         BLOCK,
         IF,
-        WHILE
+        WHILE,
+        FUNC,
+        CALL,
+        RETURN
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -87,4 +90,38 @@ struct WhileAST : public AST
 
 private:
     std::unique_ptr<AST> cond, body;
+};
+
+struct FuncAST : public AST
+{
+    FuncAST(Pos pos, std::string name, std::unique_ptr<AST> body) : AST{FUNC, pos}, name{std::move(name)}, body{std::move(body)} {}
+
+    const std::string& getName() const { return name; }
+    const AST& getBody() const { return *body; }
+
+private:
+    std::string name;
+    std::unique_ptr<AST> body;
+};
+
+struct CallAST : public AST
+{
+    CallAST(Pos pos, std::string funcName, std::vector<std::unique_ptr<AST>> args): AST{CALL, pos}, funcName{std::move(funcName)}, args{std::move(args)} {}
+
+    const std::string& getFuncName() const { return funcName; }
+    const std::vector<std::unique_ptr<AST>>& getArgs() const { return args; }
+
+private:
+    std::string funcName;
+    std::vector<std::unique_ptr<AST>> args;
+};
+
+struct ReturnAST : public AST
+{
+    ReturnAST(Pos pos, std::unique_ptr<AST> value) : AST{RETURN, pos}, value{std::move(value)} {}
+
+    const AST* getValue() const { return value.get(); }
+
+private:
+    std::unique_ptr<AST> value;
 };

@@ -21,25 +21,55 @@ class Parser
         curTok = lexer.getToken(s);
     }
 
+    std::unique_ptr<AST> parseCall(Pos pos, SymbolTable& table, std::string funcName, std::istream& s)
+    {
+        // Function call (we will check if the function exists during compilation)
+        eatToken(s, '(', "Expected '(' after function name.");
+
+        std::vector<std::unique_ptr<AST>> args;
+
+        while(curTok != ')') {
+            args.emplace_back(parseRelation(table, s));
+
+            if(curTok == ',') {
+                curTok = lexer.getToken(s);
+            } else if(curTok != ')') {
+                throw PosError{lexer.getPos(), "Expected ',' or ')' in argument list."};
+            }
+        }
+
+        curTok = lexer.getToken(s);
+
+        return std::unique_ptr<AST>{new CallAST{pos, std::move(funcName), std::move(args)}};
+    }
+
     std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
     {
         std::unique_ptr<AST> lhs;
         
         if(curTok == TOK_INT) {
             lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
+            curTok = lexer.getToken(s);
         } else if(curTok == TOK_ID) {
-            auto var = table.getVar(lexer.getLexeme(), curFunc);
-            
-            if(!var) {
-                throw PosError{lexer.getPos(), "Referenced undeclared variable " + lexer.getLexeme()};
+            auto pos = lexer.getPos();
+            auto name = lexer.getLexeme();
+
+            curTok = lexer.getToken(s);
+
+            if(curTok != '(') {
+                auto var = table.getVar(name, curFunc);
+                
+                if(!var) {
+                    throw PosError{pos, "Referenced undeclared variable " + name};
+                }  
+
+                lhs.reset(new IdAST{pos, std::move(name)});
+            } else { 
+                lhs = parseCall(pos, table, std::move(name), s);
             }
-    
-            lhs.reset(new IdAST{lexer.getPos(), lexer.getLexeme()});
         } else {
             throw PosError{lexer.getPos(), "Unexpected token."};
         }
-
-        curTok = lexer.getToken(s);
 
         while(curTok == '*' || curTok == '/') {
             int op = curTok;
@@ -106,27 +136,46 @@ class Parser
 
             return std::unique_ptr<AST>{new BlockAST{pos, std::move(asts)}};
         } else if(curTok == TOK_VAR || curTok == TOK_ID) {
+            auto pos = lexer.getPos();
+
+            bool varDecl = false;
+
+            std::string name;
+
             if(curTok == TOK_VAR) {
                 curTok = lexer.getToken(s);
 
                 expectToken(TOK_ID, "Expected identifier after 'var'.\n");
 
-                auto pos = lexer.getPos();
+                pos = lexer.getPos();
 
-                table.declVar(lexer.getPos(), lexer.getLexeme(), nullptr);
+                table.declVar(lexer.getPos(), lexer.getLexeme(), curFunc);
+                name = lexer.getLexeme();
+
+                varDecl = true;
+            } else {
+                name = lexer.getLexeme();
             }
 
             std::unique_ptr<AST> lhs{new IdAST{lexer.getPos(), lexer.getLexeme()}};
 
             curTok = lexer.getToken(s);
 
-            expectToken('=', "Expected '=' after identifier.");
+            if(varDecl) {
+                expectToken('=', "Expected '=' after var " + name);
+            }
 
-            curTok = lexer.getToken(s);
+            if(curTok == '=') {
+                curTok = lexer.getToken(s);
 
-            auto rhs = parseTerm(table, s);
+                auto rhs = parseTerm(table, s);
 
-            return std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), '='}};
+                return std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), '='}};
+            } else if(curTok != '(') {
+                throw PosError{lexer.getPos(), "Expected call or assignment statement."};
+            }
+
+            return parseCall(pos, table, std::move(name), s);
         } else if(curTok == TOK_IF) {
             auto pos = lexer.getPos();
             curTok = lexer.getToken(s);
@@ -161,6 +210,57 @@ class Parser
             auto body = parseStatement(table, s);
 
             return std::unique_ptr<AST>{new WhileAST{pos, std::move(cond), std::move(body)}};
+        } else if(curTok == TOK_FUNC) {
+            auto pos = lexer.getPos();
+            if(curFunc) { 
+                throw PosError{pos, "Cannot declare function inside function."};
+            }
+
+            curTok = lexer.getToken(s);
+
+            expectToken(TOK_ID, "Expected identifier after 'func'.");
+
+            curFunc = &table.declFunc(pos, lexer.getLexeme());
+
+            auto funcName = curFunc->name;
+            
+            curTok = lexer.getToken(s);
+
+            eatToken(s, '(', "Expected '(' after " + curFunc->name);
+
+            while(curTok != ')') {
+                expectToken(TOK_ID, "Expected identifier in argument list.\n");
+
+                table.declArg(lexer.getPos(), lexer.getLexeme(), *curFunc);
+
+                curTok = lexer.getToken(s);
+
+                if(curTok == ',') {
+                    curTok = lexer.getToken(s);
+                } else if(curTok != ')') {
+                    throw PosError{lexer.getPos(), "Expected ',' or ')' after arg."};
+                }
+            }
+
+            curTok = lexer.getToken(s);
+
+            auto body = parseStatement(table, s);
+
+            curFunc = nullptr;
+
+            return std::unique_ptr<AST>{new FuncAST{pos, std::move(funcName), std::move(body)}};
+        } else if(curTok == TOK_RETURN) {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            if(curTok == ';') {
+                curTok = lexer.getToken(s);
+                // No return value
+
+                return std::unique_ptr<AST>{new ReturnAST{pos, nullptr}};
+            } else {
+                return std::unique_ptr<AST>{new ReturnAST{pos, parseRelation(table, s)}};
+            }
         } else {
             throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
         }

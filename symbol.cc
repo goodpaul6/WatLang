@@ -33,7 +33,7 @@ struct SymbolTable
             }
         }
 
-        funcs.emplace_back(Func{pos, name, {}, {}, -1});
+        funcs.emplace_back(Func{std::move(pos), std::move(name), {}, {}, -1});
         return funcs.back();
     }
 
