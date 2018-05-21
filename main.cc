@@ -23,8 +23,10 @@ int main(int argc, char** argv)
         compiler.compile(table, asts, cout);
     } catch(const PosError& e) {
         cerr << e.getPos().line << ": " << e.getMessage() << "\n";
+        return 1;
     } catch(const std::exception& e) {
         cerr << e.what() << "\n";
+        return 1;
     }
 
     return 0;

@@ -25,6 +25,31 @@ func puts(s) {
 }
 
 func putn(n) {
+    // If the number is 0, we just output that and exit
+    asm "bne $1, $0, putnNonZero"
+    asm "lis $3"
+    asm ".word 48"
+    asm "lis $4"
+    asm ".word 0xffff000c"
+    asm "sw $3, 0($4)"
+    asm "lis $3"
+    asm ".word putnExit"
+    asm "jr $3"
+
+    asm "putnNonZero:"
+
+    // If the number is < 0, print the sign and negate it
+    asm "slt $3, $1, $0"
+    asm "beq $3, $0, putnPostSign"
+    asm "lis $3"
+    asm ".word 45"
+    asm "lis $4"
+    asm ".word 0xffff000c"
+    asm "sw $3, 0($4)"
+    asm "sub $1, $0, $1"
+
+    asm "putnPostSign:"
+
     // Make room on the stack for 20 digits (4 * 20 = 80 bytes)
     asm "lis $3"
     asm ".word 80"
@@ -61,7 +86,7 @@ func putn(n) {
 
     asm "putnprintloop:"
 
-    asm "beq $4, $30, putnend"
+    asm "beq $4, $30, putnEnd"
     asm "lw $6, -4($4)"
     asm "lis $7"
     asm ".word 48"
@@ -76,11 +101,13 @@ func putn(n) {
     asm ".word putnprintloop"
     asm "jr $6"
 
-    asm "putnend:"
+    asm "putnEnd:"
 
     asm "lis $3"
     asm ".word 80"
     asm "add $30, $30, $3"
+
+    asm "putnExit:"
 
     putc(10)
 }

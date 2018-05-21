@@ -3,6 +3,8 @@
 
 struct Func;
 
+struct AST;
+
 struct Var
 {
     Pos pos;

@@ -169,6 +169,15 @@ class Parser
 
             curTok = lexer.getToken(s);
 
+            if(varDecl && !curFunc) {
+                if(curTok == '=') {
+                    throw PosError{lexer.getPos(), "Top level assignment expressions are not allowed."};
+                } else {
+                    // Keep going
+                    return parseStatement(table, s);
+                }
+            }
+
             if(varDecl) {
                 expectToken('=', "Expected '=' after var " + name);
             }

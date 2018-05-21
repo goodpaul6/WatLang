@@ -22,7 +22,7 @@ struct Compiler
 private:
     int curReg = 1;
     int labelIndex = 0;
-    
+
     // The function we are compiling rn
     Func* curFunc = nullptr;
 
