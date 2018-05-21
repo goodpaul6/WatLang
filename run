@@ -1,0 +1,5 @@
+#!/bin/bash
+
+./basic < "$1" > "${1}.asm"
+cs241.binasm < "${1}.asm" > "${1}.mips"
+mips.twoints "${1}.mips"

@@ -100,7 +100,11 @@ private:
  
         int prev = curReg;
 
-        int temp = 1;
+        // We'll use registers which are not in use by the function
+        // to store our temp args
+        curReg = func->firstReg;
+
+        int temp = curReg++;
 
         out << "lis $" << temp << "\n";
         out << ".word " << spaceUsed << "\n";
@@ -109,10 +113,6 @@ private:
         curReg = temp;
 
         // compile and assign arguments to the correct registers
-
-        // We'll use registers which are not in use by the function
-        // to store our temp args
-        curReg = func->firstReg;
         
         auto i = 0u;
         for(auto& arg : ast.getArgs()) {

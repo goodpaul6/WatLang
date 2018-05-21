@@ -65,7 +65,18 @@ func putn(n) {
     putc(10)
 }
 
+func fact(n) {
+    putn(n)
+    if(n < 2) return 1
+    return n * fact(n - 1)
+}
+
 func main() {
-    putn(123 - 100)
-    putn(250)
+    var i = 10
+    while(i > 0) {
+        putn(i)
+        i = i - 1
+    }
+
+    putn(fact(5))
 }
