@@ -18,7 +18,8 @@ enum Token
     TOK_LTE = -12,
     TOK_GTE = -13,
     TOK_ASM = -14,
-    TOK_EOF = -15
+    TOK_DIRECTIVE = -15,
+    TOK_EOF = -16
 };
 
 struct Pos
@@ -82,6 +83,18 @@ struct Lexer
             last = s.get();
             
             return TOK_STR;
+        }
+
+        if(last == '#') {
+            last = s.get();
+
+            lexeme.clear();
+            while(isalpha(last)) {
+                lexeme += last;
+                last = s.get();
+            }
+
+            return TOK_DIRECTIVE;
         }
 
         if(last == EOF) {

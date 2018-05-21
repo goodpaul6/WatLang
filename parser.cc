@@ -1,10 +1,13 @@
-#include <istream>
+#include <fstream>
 #include <memory>
 #include <vector>
+#include <unordered_set>
 
 class Parser
 {
     Lexer lexer;
+    std::unordered_set<std::string> includes;
+
     int curTok = 0;
     Func* curFunc = nullptr;
 
@@ -271,6 +274,41 @@ class Parser
             curTok = lexer.getToken(s);
 
             return std::unique_ptr<AST>{new AsmAST{pos, std::move(str)}};
+        } else if(curTok == TOK_DIRECTIVE) {
+            auto pos = lexer.getPos();
+            if(lexer.getLexeme() == "include") {
+                if(curFunc) {
+                    throw PosError{pos, "Cannot put #include inside function"};
+                }
+
+                curTok = lexer.getToken(s);
+
+                expectToken(TOK_STR, "Expected string after '#include'.");
+                
+                // We've already included this file, so don't bother
+                if(includes.find(lexer.getLexeme()) != includes.end()) {
+                    curTok = lexer.getToken(s);
+                    return parseStatement(table, s);
+                }
+
+                std::ifstream f{lexer.getLexeme()};
+                curTok = lexer.getToken(s);
+
+                Parser p;
+
+                p.includes = includes;
+
+                auto asts = p.parseUntilEof(table, f);
+
+                // Merge the includes from the included file
+                for(auto& i : p.includes) {
+                    includes.insert(i);
+                }
+
+                return std::unique_ptr<AST>{new BlockAST{pos, std::move(asts)}};
+            } else {
+                throw PosError{pos, "Invalid directive #" + lexer.getLexeme()};
+            }
         } else {
             throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
         }

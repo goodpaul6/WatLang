@@ -101,7 +101,9 @@ private:
         int prev = curReg;
 
         // We'll use registers which are not in use by the function
-        // to store our temp args
+        // to store our temp args (because even if we stored them, when
+        // this call is being compiled, temporary values are being stored
+        // in them)
         curReg = func->firstReg;
 
         int temp = curReg++;
