@@ -12,7 +12,8 @@ struct AST
         WHILE,
         FUNC,
         CALL,
-        RETURN
+        RETURN,
+        ASM
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -124,4 +125,13 @@ struct ReturnAST : public AST
 
 private:
     std::unique_ptr<AST> value;
+};
+
+struct AsmAST : public AST
+{
+    AsmAST(Pos pos, std::string code) : AST{ASM, pos}, code{std::move(code)} {}
+
+    const std::string& getCode() const { return code; }
+private:
+    std::string code;
 };

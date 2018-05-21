@@ -6,6 +6,10 @@ struct Compiler
 {
     void compile(SymbolTable& table, const std::vector<std::unique_ptr<AST>>& asts, std::ostream& out)
     {
+        if(!table.getFunc("main")) {
+            throw std::runtime_error{"Missing main function."};
+        }
+
         resolveSymbolLocations(table, out);
 
         out << "; code\n";
@@ -13,8 +17,6 @@ struct Compiler
         for(auto& ast : asts) {
             compileStatement(table, *ast, out);
         }
-
-        out << "jr $31\n";
     }
 
 private:
@@ -37,10 +39,8 @@ private:
     // Makes room for symbols and sets their location values
     void resolveSymbolLocations(SymbolTable& table, std::ostream& out)
     {
-        auto startLabel = uniqueLabel();
-
         out << "lis $1\n";
-        out << ".word " << startLabel << "\n";
+        out << ".word main\n";
         out << "jr $1\n";
 
         out << "; globals\n";
@@ -53,8 +53,6 @@ private:
             v.loc = i;
             i += 4;
         }
-
-        out << startLabel << ":\n";
 
         for(auto& f : table.funcs) {
             auto reg = 1;
@@ -100,6 +98,8 @@ private:
             out << "sw $" << i << ", -" << spaceUsed << "($30)\n";
         }
  
+        int prev = curReg;
+
         int temp = curReg++;
 
         out << "lis $" << temp << "\n";
@@ -109,6 +109,10 @@ private:
         curReg = temp;
 
         // compile and assign arguments to the correct registers
+
+        // We'll use registers which are not in use by the function
+        // to store our temp args
+        curReg = func->firstReg;
         
         auto i = 0u;
         for(auto& arg : ast.getArgs()) {
@@ -126,6 +130,8 @@ private:
         out << "lis $" << temp << "\n";
         out << ".word " << func->name << "\n";
         out << "jalr $" << temp << "\n";
+
+        curReg = prev;
 
         // Move return value (could be garbage if there is none) into temp reg
         out << "add $" << curReg++ << ", $" << (func->firstReg - 1) << ", $0\n";
@@ -316,8 +322,8 @@ private:
 
             curReg = prevReg;
 
+            out << altLabel << ":\n";
             if(ist.getAlt()) {
-                out << altLabel << ":\n";
                 compileStatement(table, *ist.getAlt(), out);
             }
 
@@ -355,14 +361,7 @@ private:
             
             assert(curFunc);
 
-            auto endLabel = uniqueLabel();
-
             int temp = curReg++;
-
-            // Skip over this function when executing global code
-            out << "lis $" << temp << "\n";
-            out << ".word " << endLabel << "\n";
-            out << "jr $" << temp << "\n";
 
             // Some info for debugging asm
             for(auto& arg : curFunc->args) {
@@ -395,8 +394,6 @@ private:
             compileRestoreLinkAndSp(out);
             out << "jr $31\n";
 
-            out << endLabel << ":\n";
-
             curFunc = nullptr;
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<const CallAST&>(ast);
@@ -419,6 +416,8 @@ private:
 
             compileRestoreLinkAndSp(out);
             out << "jr $31\n";
+        } else if(ast.getType() == AST::ASM) {
+            out << static_cast<const AsmAST&>(ast).getCode() << "\n";
         } else {
             throw PosError{ast.getPos(), "Expected statement."};
         }

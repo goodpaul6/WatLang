@@ -17,7 +17,8 @@ enum Token
     TOK_EQUALS = -11,
     TOK_LTE = -12,
     TOK_GTE = -13,
-    TOK_EOF = -14
+    TOK_ASM = -14,
+    TOK_EOF = -15
 };
 
 struct Pos
@@ -54,6 +55,7 @@ struct Lexer
             if(lexeme == "while") return TOK_WHILE;
             if(lexeme == "for") return TOK_FOR;
             if(lexeme == "return") return TOK_RETURN;
+            if(lexeme == "asm") return TOK_ASM;
 
             return TOK_ID;
         }
@@ -77,7 +79,8 @@ struct Lexer
                 lexeme += last;
                 last = s.get();
             }
-
+            last = s.get();
+            
             return TOK_STR;
         }
 

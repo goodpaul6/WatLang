@@ -261,6 +261,16 @@ class Parser
             } else {
                 return std::unique_ptr<AST>{new ReturnAST{pos, parseRelation(table, s)}};
             }
+        } else if(curTok == TOK_ASM) {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            expectToken(TOK_STR, "Expected string after 'asm'.");
+
+            auto str = lexer.getLexeme();
+            curTok = lexer.getToken(s);
+
+            return std::unique_ptr<AST>{new AsmAST{pos, std::move(str)}};
         } else {
             throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
         }
