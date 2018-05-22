@@ -1,0 +1,6 @@
+globals.wat
+unary.wat
+unarylhs.wat
+putzero.wat
+fact.wat
+tree.wat
