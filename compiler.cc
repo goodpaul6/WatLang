@@ -180,6 +180,8 @@ private:
             out << ".word " << static_cast<const IntAST&>(ast).getValue() << "\n";
 
             return curReg - 1;
+        } else if(ast.getType() == AST::PAREN) {
+            compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
         } else if(ast.getType() == AST::ID) {
             auto idAst = static_cast<const IdAST&>(ast);
 
@@ -210,6 +212,20 @@ private:
             out << ".word " << table.getString(static_cast<const StrAST&>(ast).getId()).loc << "\n";
 
             return curReg - 1;
+        } else if(ast.getType() == AST::UNARY) {
+            int reg = compileTerm(table, static_cast<const UnaryAST&>(ast).getRhs(), out);
+
+            switch(static_cast<const UnaryAST&>(ast).getOp()) {
+                case '-': {
+                    out << "sub $" << curReg++ << ", $0, $" << reg << "\n";
+                    return curReg - 1;
+                } break;
+
+                case '*': {
+                    out << "lw $" << curReg++ << ", 0($" << reg << ")\n";
+                    return curReg - 1;
+                } break;
+            }
         }
 
         assert(ast.getType() == AST::BIN);

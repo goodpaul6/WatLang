@@ -14,7 +14,9 @@ struct AST
         FUNC,
         CALL,
         RETURN,
-        ASM
+        ASM,
+        UNARY,
+        PAREN
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -146,4 +148,26 @@ struct AsmAST : public AST
     const std::string& getCode() const { return code; }
 private:
     std::string code;
+};
+
+struct UnaryAST : public AST
+{
+    UnaryAST(Pos pos, std::unique_ptr<AST> rhs, int op) : AST{UNARY, pos}, rhs{std::move(rhs)}, op{op} {}
+
+    const AST& getRhs() const { return *rhs; }
+    int getOp() const { return op; }
+
+private:
+    int op;
+    std::unique_ptr<AST> rhs;
+};
+
+struct ParenAST : public AST
+{
+    ParenAST(Pos pos, std::unique_ptr<AST> inner) : AST{PAREN, pos}, inner{std::move(inner)} {}
+
+    const AST& getInner() const { return *inner; }
+
+private:
+    std::unique_ptr<AST> inner;
 };

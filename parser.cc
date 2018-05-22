@@ -45,12 +45,29 @@ class Parser
 
         return std::unique_ptr<AST>{new CallAST{pos, std::move(funcName), std::move(args)}};
     }
-
-    std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
+    
+    std::unique_ptr<AST> parseUnary(SymbolTable& table, std::istream& s)
     {
         std::unique_ptr<AST> lhs;
-        
-        if(curTok == TOK_INT) {
+
+        if(curTok == '-' || curTok == '*') {
+            auto pos = lexer.getPos();
+
+            int op = curTok;
+
+            curTok = lexer.getToken(s);
+
+            lhs.reset(new UnaryAST{pos, parseUnary(table, s), op});
+        } else if(curTok == '(') {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            auto inner = parseRelation(table, s);
+
+            eatToken(s, ')', "Expected ')' to match previous '('.");
+
+            lhs.reset(new ParenAST{pos, std::move(inner)});
+        } else if(curTok == TOK_INT) {
             lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
             curTok = lexer.getToken(s);
         } else if(curTok == TOK_STR) {
@@ -79,6 +96,13 @@ class Parser
             throw PosError{lexer.getPos(), "Unexpected token."};
         }
 
+        return lhs;
+    }
+
+    std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
+    {
+        auto lhs = parseUnary(table, s);
+        
         while(curTok == '*' || curTok == '/') {
             int op = curTok;
 
@@ -126,7 +150,7 @@ class Parser
 
         return lhs;
     }
-
+ 
     std::unique_ptr<AST> parseStatement(SymbolTable& table, std::istream& s)
     {
         if(curTok == '{') {
