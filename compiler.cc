@@ -1,6 +1,7 @@
 #include <ostream>
 #include <cassert>
 #include <unordered_map>
+#include <algorithm>
 
 struct Compiler
 {
@@ -118,7 +119,7 @@ private:
         // to store our temp args (because even if we stored them, when
         // this call is being compiled, temporary values are being stored
         // in them)
-        curReg = func->firstReg;
+        curReg = std::max(func->firstReg, curFunc ? curFunc->firstReg : 0);
 
         int temp = curReg++;
 
@@ -138,10 +139,11 @@ private:
 
             // We are free to stomp that register now
             curReg = reg;
+            i += 1;
         }
 
         // Jump into the function  
-        temp = func->firstReg;
+        temp = std::max(func->firstReg, curFunc ? curFunc->firstReg : 0);
 
         out << "lis $" << temp << "\n";
         out << ".word " << func->name << "\n";
@@ -188,7 +190,12 @@ private:
             }
 
             if(var->func) {
-                return var->loc;
+                // HAHA no can't depend on this being saved properly when you're calling a function for example
+                // return var->loc;
+
+                // We move it into a temp reg we know works and then use that
+                out << "add $" << curReg++ << ", $" << var->loc << ", $0\n";
+                return curReg - 1;
             } else {
                 out << "lw $" << curReg++ << ", " << var->loc << "($0)\n";
             
