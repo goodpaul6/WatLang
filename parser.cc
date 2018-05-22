@@ -257,11 +257,11 @@ class Parser
             auto pos = lexer.getPos();
             curTok = lexer.getToken(s);
 
-            eatToken(s, '(', "Expected '(' after 'if'.");
+            eatToken(s, '(', "Expected '(' after 'while'.");
 
             auto cond = parseRelation(table, s);
 
-            eatToken(s, ')', "Expected ')' after 'if'.");
+            eatToken(s, ')', "Expected ')' after 'while'.");
 
             auto body = parseStatement(table, s);
 
