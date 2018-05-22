@@ -1,7 +1,7 @@
 #include <iostream>
 
-#include "lexer.cc"
 #include "error.cc"
+#include "lexer.cc"
 #include "symbol.cc"
 #include "ast.cc"
 #include "parser.cc"
@@ -27,6 +27,8 @@ int main(int argc, char** argv)
     } catch(const std::exception& e) {
         cerr << e.what() << "\n";
         return 1;
+    } catch(...) {
+        throw;
     }
 
     return 0;

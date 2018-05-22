@@ -323,21 +323,35 @@ private:
 
             int reg = compileTerm(table, bst.getRhs(), out);
 
-            auto& name = static_cast<const IdAST&>(bst.getLhs()).getName();
+            auto& lhs = bst.getLhs();
 
-            auto var = table.getVar(name, curFunc);
-     
-            if(!var) {
-                throw PosError{ast.getPos(), "Attempted to reference undeclared identifier " + name};
-            }
+            if(lhs.getType() == AST::ID) {
+                auto& name = static_cast<const IdAST&>(lhs).getName();
 
-            if(!var->func) {
-                out << "; storing into " << var->name << "\n";
-                out << "sw $" << reg << ", " << var->loc << "($0)\n"; 
+                auto var = table.getVar(name, curFunc);
+
+                if(!var) {
+                    throw PosError{ast.getPos(), "Attempted to reference undeclared identifier " + name};
+                }
+
+                if(!var->func) {
+                    out << "; storing into " << var->name << "\n";
+                    out << "sw $" << reg << ", " << var->loc << "($0)\n"; 
+                } else {
+                    out << "add $" << var->loc << ", $" << reg << ", $0\n";
+                }
             } else {
-                out << "add $" << var->loc << ", $" << reg << ", $0\n";
+                assert(lhs.getType() == AST::UNARY);
+                
+                auto& ust = static_cast<const UnaryAST&>(lhs);
+
+                assert(ust.getOp() == '*');
+
+                int lreg = compileTerm(table, ust.getRhs(), out);
+
+                out << "sw $" << reg << ", 0($" << lreg << ")\n";
             }
-            
+
             // We're done with this register now that it's stored
             curReg = reg;
         } else if(ast.getType() == AST::BLOCK) {

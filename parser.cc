@@ -70,6 +70,9 @@ class Parser
         } else if(curTok == TOK_INT) {
             lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
             curTok = lexer.getToken(s);
+        } else if(curTok == TOK_CHAR) {
+            lhs.reset(new IntAST{lexer.getPos(), lexer.getLexeme()[0]});
+            curTok = lexer.getToken(s);
         } else if(curTok == TOK_STR) {
             int id = table.internString(lexer.getLexeme());
             lhs.reset(new StrAST{lexer.getPos(), id});
@@ -167,6 +170,18 @@ class Parser
             curTok = lexer.getToken(s);
 
             return std::unique_ptr<AST>{new BlockAST{pos, std::move(asts)}};
+        } else if(curTok == '*') {
+            auto pos = lexer.getPos();
+
+            auto lhs = parseUnary(table, s);
+
+            if(curTok != '=') {
+                throw PosError{lexer.getPos(), "Expected '=' after unary expression."};
+            }
+
+            curTok = lexer.getToken(s);
+
+            return std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), parseRelation(table, s), '='}};
         } else if(curTok == TOK_VAR || curTok == TOK_ID) {
             auto pos = lexer.getPos();
 

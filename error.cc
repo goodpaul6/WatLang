@@ -1,3 +1,8 @@
+struct Pos
+{
+    int line;
+};
+
 struct PosError
 {
     PosError(Pos pos, std::string message) : pos{pos}, message{std::move(message)} {}

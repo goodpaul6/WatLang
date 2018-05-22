@@ -19,12 +19,8 @@ enum Token
     TOK_GTE = -13,
     TOK_ASM = -14,
     TOK_DIRECTIVE = -15,
-    TOK_EOF = -16
-};
-
-struct Pos
-{
-    int line;
+    TOK_CHAR = -16,
+    TOK_EOF = -17
 };
 
 struct Lexer
@@ -64,12 +60,41 @@ struct Lexer
         if(isdigit(last)) {
             lexeme.clear();
 
-            while(isdigit(last)) {
+            if(last == '0') {
+                lexeme += last;
+                last = s.get();
+
+                if(last == 'x') {
+                    lexeme += last;
+                    last = s.get();
+                } 
+            }
+
+            while(isxdigit(last)) {
                 lexeme += last;
                 last = s.get();
             }
 
+            intVal = std::strtol(lexeme.c_str(), nullptr, 0); 
+
             return TOK_INT;
+        }
+
+        if(last == '\'') {
+            last = s.get();
+
+            lexeme.clear();
+            lexeme.push_back(last);
+
+            last = s.get();
+
+            if(last != '\'') {
+                throw PosError{pos, "Expected ' to match previous '."};
+            }
+            
+            last = s.get();
+
+            return TOK_CHAR;
         }
 
         if(last == '"') {
@@ -132,11 +157,12 @@ struct Lexer
     }
 
     const std::string& getLexeme() const { return lexeme; }
-    int getInt() const { return std::stoi(lexeme); }
+    int getInt() const { return intVal; }
 
 private:
     int last = ' ';
     Pos pos{1};
 
     std::string lexeme;
+    int intVal;
 };
