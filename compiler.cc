@@ -181,7 +181,7 @@ private:
 
             return curReg - 1;
         } else if(ast.getType() == AST::PAREN) {
-            compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
+            return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
         } else if(ast.getType() == AST::ID) {
             auto idAst = static_cast<const IdAST&>(ast);
 
