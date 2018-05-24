@@ -137,6 +137,61 @@ class Parser
             } else { 
                 lhs = parseCall(pos, table, std::move(name), s);
             }
+        } else if(curTok == '[') {
+            auto pos = lexer.getPos();
+
+            curTok = lexer.getToken(s);
+
+            int length = -1;
+
+            if(curTok == ']') {
+                curTok = lexer.getToken(s);
+            } else {
+                expectToken(TOK_INT, "Expected integer or ']' after '['.");
+
+                length = lexer.getInt();
+
+                curTok = lexer.getToken(s);
+
+                eatToken(s, ']', "Expected ']' after '[' and integer.");
+            }
+
+            if(curTok == '{') {
+                curTok = lexer.getToken(s);
+
+                std::vector<int> values;
+
+                while(curTok != '}') {
+                    expectToken(TOK_INT, "Expected integer in array literal.");
+
+                    values.emplace_back(lexer.getInt());
+
+                    curTok = lexer.getToken(s);
+
+                    if(curTok == ',') {
+                        curTok = lexer.getToken(s);
+                    } else if(curTok != '}') {
+                        throw PosError{pos, "Expected ',' or '}' in array literal."};
+                    }
+                }
+
+                curTok = lexer.getToken(s);
+
+                lhs.reset(new ArrayAST{pos, length, std::move(values), AST::ARRAY});
+            } else {
+                expectToken(TOK_STR, "Expected string or '{' after '['.");
+
+                std::vector<int> values;
+                values.reserve(lexer.getLexeme().size());
+
+                for(auto ch : lexer.getLexeme()) {
+                    values.push_back(ch);
+                }
+
+                lhs.reset(new ArrayAST{pos, length, std::move(values), AST::ARRAY_STRING});
+
+                curTok = lexer.getToken(s);
+            }
         } else {
             throw PosError{lexer.getPos(), "Unexpected token."};
         }

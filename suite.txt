@@ -4,3 +4,5 @@ unarylhs.wat
 putzero.wat
 fact.wat
 tree.wat
+array.wat
+buildstr.wat

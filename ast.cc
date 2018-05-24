@@ -19,7 +19,9 @@ struct AST
         ASM,
         UNARY,
         PAREN,
-        CAST
+        CAST,
+        ARRAY,
+        ARRAY_STRING
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -186,4 +188,18 @@ struct CastAST : public AST
 private:
     std::unique_ptr<AST> value;
     std::unique_ptr<Typetag> targetType;
+};
+
+// If the length value for the array ast is -1, it is determined based
+// on the values
+struct ArrayAST : public AST
+{
+    ArrayAST(Pos pos, int length, std::vector<int> values, Type type) : AST{type, pos}, length{length}, values{std::move(values)} {}
+
+    const std::vector<int>& getValues() const { return values; }
+    int getLength() const { return length; }
+
+private:
+    int length;
+    std::vector<int> values;
 };

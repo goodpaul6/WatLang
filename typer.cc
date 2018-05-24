@@ -189,7 +189,21 @@ private:
             case AST::CAST: {
                 return std::unique_ptr<Typetag>{new Typetag{static_cast<const CastAST&>(ast).getTargetType()}};
             } break;
-            
+
+            case AST::ARRAY: {
+                auto type = std::make_unique<Typetag>(Typetag::PTR);
+                type->inner = std::make_unique<Typetag>(Typetag::INT);
+
+                return type;
+            } break;
+
+            case AST::ARRAY_STRING: {
+                auto type = std::make_unique<Typetag>(Typetag::PTR);
+                type->inner = std::make_unique<Typetag>(Typetag::CHAR);
+
+                return type;
+            } break;
+
             case AST::BIN: {
                 auto& bst = static_cast<const BinAST&>(ast);
 

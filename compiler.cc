@@ -180,6 +180,37 @@ private:
             out << ".word " << static_cast<const IntAST&>(ast).getValue() << "\n";
 
             return curReg - 1;
+        } else if(ast.getType() == AST::ARRAY || ast.getType() == AST::ARRAY_STRING) {
+            auto startLabel = uniqueLabel();
+            auto endLabel = uniqueLabel();
+
+            out << "lis $" << curReg++ << "\n";
+            out << ".word " << endLabel << "\n";
+            out << "jr $" << curReg - 1 << "\n";
+
+            out << startLabel << ":\n";
+            
+            auto& a = static_cast<const ArrayAST&>(ast);
+    
+            if(a.getLength() == 0) {
+                throw PosError{ast.getPos(), "Size of array literal must be > 0."};
+            }
+
+            auto i = 0u;
+            for(auto value : a.getValues()) {
+                out << ".word " << value << "\n";
+            }
+
+            for(auto j = i; j < a.getLength(); ++j) {
+                out << ".word 0\n";
+            }
+
+            out << endLabel << ":\n";
+
+            out << "lis $" << curReg - 1 << "\n";
+            out << ".word " << startLabel << "\n";
+            
+            return curReg - 1;
         } else if(ast.getType() == AST::PAREN) {
             return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
         } else if(ast.getType() == AST::ID) {
