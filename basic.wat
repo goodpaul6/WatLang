@@ -1,3 +1,7 @@
+func getc() : char {
+    return *cast(*char) 0xffff0004
+}
+
 func putc(c : char) : void {
     asm "lis $3"
     asm ".word 0xffff000c"

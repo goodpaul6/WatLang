@@ -8,3 +8,4 @@ tree.wat
 array.wat
 buildstr.wat
 str.wat
+echo.wat
