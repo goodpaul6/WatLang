@@ -1,5 +1,5 @@
 # WatLang
-A small language which compiles to a subset of MIPS.
+A small statically-typed language which compiles to a subset of MIPS.
 
 ## Usage
 On a linux machine, you need only
@@ -21,12 +21,12 @@ and use a MIPS assembler to assemble `my_file.asm` into a binary.
 // This provides the procedure 'putn' which outputs a number to stdout
 #include "basic.wat"
 
-func fact(n) {
+func fact(n : int) : int {
     if(n < 2) return 1
     return n * fact(n - 1)
 }
 
-func main() {
+func main() : void {
     putn(fact(5))
 }
 ```
@@ -35,7 +35,7 @@ Prints `120` to stdout as required.
 Let's have a look at the `putn` procedure definition.
 
 ```
-func putn(n) {
+func putn(n : int) : void {
     // Make room on the stack for 20 digits (4 * 20 = 80 bytes)
     asm "lis $3"
     asm ".word 80"
