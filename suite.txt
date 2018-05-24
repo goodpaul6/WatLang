@@ -7,3 +7,4 @@ fact.wat
 tree.wat
 array.wat
 buildstr.wat
+str.wat

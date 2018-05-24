@@ -194,6 +194,7 @@ class Parser
                 for(auto ch : lexer.getLexeme()) {
                     values.push_back(ch);
                 }
+                values.push_back(0);
 
                 lhs.reset(new ArrayAST{pos, length, std::move(values), AST::ARRAY_STRING});
 
