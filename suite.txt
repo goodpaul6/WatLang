@@ -1,3 +1,4 @@
+hello.wat
 globals.wat
 unary.wat
 unarylhs.wat
