@@ -20,7 +20,9 @@ enum Token
     TOK_ASM = -14,
     TOK_DIRECTIVE = -15,
     TOK_CHAR = -16,
-    TOK_EOF = -17
+    TOK_CAST = -17,
+    TOK_NOTEQUALS = -18,
+    TOK_EOF = -19
 };
 
 struct Lexer
@@ -53,6 +55,7 @@ struct Lexer
             if(lexeme == "for") return TOK_FOR;
             if(lexeme == "return") return TOK_RETURN;
             if(lexeme == "asm") return TOK_ASM;
+            if(lexeme == "cast") return TOK_CAST;
 
             return TOK_ID;
         }
@@ -132,6 +135,11 @@ struct Lexer
         if(lastCh == '=' && last == '=') {
             last = s.get();
             return TOK_EQUALS;
+        }
+
+        if(lastCh == '!' && last == '=') {
+            last = s.get();
+            return TOK_NOTEQUALS;
         }
 
         if(lastCh == '<' && last == '=') {

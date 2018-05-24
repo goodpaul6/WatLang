@@ -1,9 +1,11 @@
 #include <string>
 #include <vector>
+#include <memory>
 
 struct Func;
 
 struct AST;
+struct Typetag;
 
 struct Var
 {
@@ -12,6 +14,8 @@ struct Var
 
     Func* func;
     int loc;    // Initialized to -1; could store register index or memory location as determined by compiler
+
+    std::unique_ptr<Typetag> typetag;
 };
 
 struct Func
@@ -23,6 +27,8 @@ struct Func
     std::vector<Var> locals;
 
     int firstReg; // First unused register (after registers for arguments and locals have been allocated), -1 by default, assigned by compiler
+
+    std::unique_ptr<Typetag> returnType;
 };
 
 struct CString

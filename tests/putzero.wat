@@ -1,5 +1,5 @@
 #include "basic.wat"
 
-func main() {
+func main() : void {
     putn(0)
 }

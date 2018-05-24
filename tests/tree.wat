@@ -1,11 +1,11 @@
 #include "../WatLang/basic.wat"
 
-func traverse(ap, index) {
+func traverse(ap : *int, index : int) : void {
     if(index < 0) {
         return;
     }
 
-    var np = ap + index * 4
+    var np : *int = ap + index * 4
 
     putn(*np)
 
@@ -13,8 +13,8 @@ func traverse(ap, index) {
     traverse(ap, *(np + 8))
 }
 
-func main() {
-    var ap = 0
+func main() : void {
+    var ap : *int = cast(*int) 0
 
     asm "lis $3"
     asm ".word start"

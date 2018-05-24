@@ -1,6 +1,7 @@
 struct Pos
 {
     int line;
+    std::string filename;
 };
 
 struct PosError
@@ -14,3 +15,4 @@ private:
     Pos pos;
     std::string message;
 };
+

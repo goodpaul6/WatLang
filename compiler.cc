@@ -226,6 +226,8 @@ private:
                     return curReg - 1;
                 } break;
             }
+        } else if(ast.getType() == AST::CAST) {
+            return compileTerm(table, static_cast<const CastAST&>(ast).getValue(), out);
         }
 
         assert(ast.getType() == AST::BIN);
@@ -256,6 +258,15 @@ private:
 
                 // Set the result to 0 if they're not equal
                 out << "beq $" << a << ", $" << b << ", 1\n";
+                out << "add $" << dest << ", $0, $0\n";
+            } break;
+
+            case TOK_NOTEQUALS: {
+                out << "lis $" << dest << "\n";
+                out << ".word 1\n";
+
+                // Set the result to 0 if they're equal
+                out << "bne $" << a << ", $" << b << ", 1\n";
                 out << "add $" << dest << ", $0, $0\n";
             } break;
 

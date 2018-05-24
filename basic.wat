@@ -1,10 +1,10 @@
-func putc(c) {
+func putc(c : char) : void {
     asm "lis $3"
     asm ".word 0xffff000c"
     asm "sw $1, 0($3)"
 }
 
-func puts(s) {
+func puts(s : *char) : void {
     asm "lis $3"
     asm ".word 0xffff000c"
 
@@ -21,10 +21,10 @@ func puts(s) {
     asm "jr $4"
 
     asm "putsEnd:"
-    putc(10)
+    putc(cast(char) 10)
 }
 
-func putn(n) {
+func putn(n : int) : void {
     // If the number is 0, we just output that and exit
     asm "bne $1, $0, putnNonZero"
     asm "lis $3"
@@ -109,5 +109,5 @@ func putn(n) {
 
     asm "putnExit:"
 
-    putc(10)
+    putc(cast(char) 10)
 }

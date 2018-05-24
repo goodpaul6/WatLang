@@ -24,6 +24,37 @@ class Parser
         curTok = lexer.getToken(s);
     }
 
+    std::unique_ptr<Typetag> parseType(SymbolTable& table, std::istream& s)
+    {
+        if(curTok == '*') {
+            auto tag = std::make_unique<Typetag>(Typetag::PTR);
+
+            curTok = lexer.getToken(s);
+
+            tag->inner = parseType(table, s);
+
+            return tag;
+        } else {
+            expectToken(TOK_ID, "Expected a type identifier.");
+
+            std::unique_ptr<Typetag> tag;
+
+            if(lexer.getLexeme() == "int") {
+                tag.reset(new Typetag{Typetag::INT});
+            } else if(lexer.getLexeme() == "char") {
+                tag.reset(new Typetag{Typetag::CHAR});
+            } else if(lexer.getLexeme() == "bool") { 
+                tag.reset(new Typetag{Typetag::BOOL});
+            } else if(lexer.getLexeme() == "void") {
+                tag.reset(new Typetag{Typetag::VOID});
+            }
+
+            curTok = lexer.getToken(s);
+
+            return tag;
+        }
+    }
+
     std::unique_ptr<AST> parseCall(Pos pos, SymbolTable& table, std::string funcName, std::istream& s)
     {
         // Function call (we will check if the function exists during compilation)
@@ -67,11 +98,22 @@ class Parser
             eatToken(s, ')', "Expected ')' to match previous '('.");
 
             lhs.reset(new ParenAST{pos, std::move(inner)});
+        } else if(curTok == TOK_CAST) {
+            auto pos = lexer.getPos();
+            curTok = lexer.getToken(s);
+
+            eatToken(s, '(', "Expected '(' after cast.");
+
+            auto type = parseType(table, s);
+
+            eatToken(s, ')', "Expected ')' to match previous '('");
+
+            lhs.reset(new CastAST{pos, parseUnary(table, s), std::move(type)});
         } else if(curTok == TOK_INT) {
-            lhs.reset(new IntAST{lexer.getPos(), lexer.getInt()});
+            lhs.reset(new IntAST{lexer.getPos(), lexer.getInt(), AST::INT});
             curTok = lexer.getToken(s);
         } else if(curTok == TOK_CHAR) {
-            lhs.reset(new IntAST{lexer.getPos(), lexer.getLexeme()[0]});
+            lhs.reset(new IntAST{lexer.getPos(), lexer.getLexeme()[0], AST::CHAR});
             curTok = lexer.getToken(s);
         } else if(curTok == TOK_STR) {
             int id = table.internString(lexer.getLexeme());
@@ -141,7 +183,7 @@ class Parser
         auto lhs = parseTerm(table, s);
 
         // Unlike terms, relations are limited to a single binary expression
-        if(curTok == '<' || curTok == '>' || curTok == TOK_EQUALS || curTok == TOK_LTE || curTok == TOK_GTE) {
+        if(curTok == '<' || curTok == '>' || curTok == TOK_EQUALS || curTok == TOK_LTE || curTok == TOK_GTE || curTok == TOK_NOTEQUALS) {
             int op = curTok;
 
             curTok = lexer.getToken(s);
@@ -185,9 +227,9 @@ class Parser
         } else if(curTok == TOK_VAR || curTok == TOK_ID) {
             auto pos = lexer.getPos();
 
-            bool varDecl = false;
-
             std::string name;
+
+            Var* decl = nullptr;
 
             if(curTok == TOK_VAR) {
                 curTok = lexer.getToken(s);
@@ -196,10 +238,8 @@ class Parser
 
                 pos = lexer.getPos();
 
-                table.declVar(lexer.getPos(), lexer.getLexeme(), curFunc);
+                decl = &table.declVar(lexer.getPos(), lexer.getLexeme(), curFunc);
                 name = lexer.getLexeme();
-
-                varDecl = true;
             } else {
                 name = lexer.getLexeme();
             }
@@ -208,7 +248,13 @@ class Parser
 
             curTok = lexer.getToken(s);
 
-            if(varDecl && !curFunc) {
+            if(decl) {
+                eatToken(s, ':', "Expected ':' after var " + name);
+
+                decl->typetag = parseType(table, s);
+            }
+
+            if(decl && !curFunc) {
                 if(curTok == '=') {
                     throw PosError{lexer.getPos(), "Top level assignment expressions are not allowed."};
                 } else {
@@ -217,8 +263,8 @@ class Parser
                 }
             }
 
-            if(varDecl) {
-                expectToken('=', "Expected '=' after var " + name);
+            if(decl) {
+                expectToken('=', "Expected '=' after var ...");
             }
 
             if(curTok == '=') {
@@ -287,9 +333,13 @@ class Parser
             while(curTok != ')') {
                 expectToken(TOK_ID, "Expected identifier in argument list.\n");
 
-                table.declArg(lexer.getPos(), lexer.getLexeme(), *curFunc);
+                auto& var = table.declArg(lexer.getPos(), lexer.getLexeme(), *curFunc);
 
                 curTok = lexer.getToken(s);
+
+                eatToken(s, ':', "Expected : after argument.");
+
+                var.typetag = parseType(table, s);
 
                 if(curTok == ',') {
                     curTok = lexer.getToken(s);
@@ -299,6 +349,10 @@ class Parser
             }
 
             curTok = lexer.getToken(s);
+
+            eatToken(s, ':', "Expected ':' after function prototype.");
+
+            curFunc->returnType = parseType(table, s);
 
             auto body = parseStatement(table, s);
 
@@ -344,14 +398,16 @@ class Parser
                     return parseStatement(table, s);
                 }
 
-                std::ifstream f{lexer.getLexeme()};
+                auto filename = lexer.getLexeme();
+
+                std::ifstream f{filename};
                 curTok = lexer.getToken(s);
 
                 Parser p;
 
                 p.includes = includes;
 
-                auto asts = p.parseUntilEof(table, f);
+                auto asts = p.parseUntilEof(table, f, filename);
 
                 // Merge the includes from the included file
                 for(auto& i : p.includes) {
@@ -368,9 +424,11 @@ class Parser
     }
 
 public:
-    std::vector<std::unique_ptr<AST>> parseUntilEof(SymbolTable& table, std::istream& s)
+    std::vector<std::unique_ptr<AST>> parseUntilEof(SymbolTable& table, std::istream& s, const std::string& filename = "")
     {
         lexer = {};
+
+        lexer.setPos({1, filename});
 
         std::vector<std::unique_ptr<AST>> asts;
 

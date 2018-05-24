@@ -1,21 +1,21 @@
 #include "basic.wat"
 
-var x
-var y
+var x : int
+var y : int
 
-func setX(n) {
+func setX(n : int) : void {
     x = n
 }
 
-func setY(n) {
+func setY(n : int) : void {
     y = n
 }
 
-func addXY() {
+func addXY() : int {
     return x + y
 }
 
-func main(a, b) {
+func main(a : int, b : int) : void {
     setX(a)
     setY(b)
     putn(addXY())

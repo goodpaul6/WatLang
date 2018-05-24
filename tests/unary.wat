@@ -1,7 +1,7 @@
 #include "basic.wat"
 
-func main() {
-    var a = 0
+func main() : void {
+    var a : *int = cast(*int) 0
 
     asm "lis $3"
     asm ".word start"
@@ -19,7 +19,7 @@ func main() {
     asm "lis $1"
     asm ".word array"
 
-    var i = 0
+    var i : int = 0
     while(i < 5) {
         putn(*a)
         a = a + 4

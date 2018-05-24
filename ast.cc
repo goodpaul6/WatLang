@@ -5,6 +5,8 @@ struct AST
     enum Type
     {
         INT,
+        BOOL,
+        CHAR,
         STR,
         ID,
         BIN,
@@ -16,7 +18,8 @@ struct AST
         RETURN,
         ASM,
         UNARY,
-        PAREN
+        PAREN,
+        CAST
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -30,9 +33,10 @@ private:
     Pos pos;
 };
 
+// Used for all of INT, BOOL, CHAR
 struct IntAST : public AST
 {
-    IntAST(Pos pos, int value) : AST{INT, pos}, value{value} {}
+    IntAST(Pos pos, int value, Type type) : AST{type, pos}, value{value} {}
 
     int getValue() const { return value; }
 
@@ -170,4 +174,16 @@ struct ParenAST : public AST
 
 private:
     std::unique_ptr<AST> inner;
+};
+
+struct CastAST : public AST
+{
+    CastAST(Pos pos, std::unique_ptr<AST> value, std::unique_ptr<Typetag> targetType) : AST{CAST, pos}, value{std::move(value)}, targetType{std::move(targetType)} {}
+
+    const Typetag& getTargetType() const { return *targetType; }
+    const AST& getValue() const { return *value; }
+
+private:
+    std::unique_ptr<AST> value;
+    std::unique_ptr<Typetag> targetType;
 };
