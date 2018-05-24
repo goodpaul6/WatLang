@@ -1,6 +1,8 @@
 #include "basic.wat"
 
 func main() : void {
-    var s : *char = []"Lorem ipsum"
-    puts(s)
+    var x : *char = [20]"Lorem "
+    strcat(x, "ipsum")
+
+    puts(x)
 }

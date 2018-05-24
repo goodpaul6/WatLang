@@ -111,3 +111,19 @@ func putn(n : int) : void {
 
     putc(cast(char) 10)
 }
+
+func strcat(dest : *char, src : *char) : void {
+    var end : *char = dest
+
+    while(*end != 0) {
+        end = end + 4
+    }
+
+    while(*src != 0) {
+        *end = *src
+        end = end + 4
+        src = src + 4
+    }
+
+    *end = cast(char) 0
+}
