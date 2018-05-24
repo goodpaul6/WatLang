@@ -162,9 +162,16 @@ class Parser
                 std::vector<int> values;
 
                 while(curTok != '}') {
+                    int fac = 1;
+
+                    if(curTok == '-') {
+                        fac = -1;
+                        curTok = lexer.getToken(s);
+                    }
+
                     expectToken(TOK_INT, "Expected integer in array literal.");
 
-                    values.emplace_back(lexer.getInt());
+                    values.emplace_back(fac * lexer.getInt());
 
                     curTok = lexer.getToken(s);
 

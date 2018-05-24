@@ -196,9 +196,10 @@ private:
                 throw PosError{ast.getPos(), "Size of array literal must be > 0."};
             }
 
-            auto i = 0u;
+            auto i = 0;
             for(auto value : a.getValues()) {
                 out << ".word " << value << "\n";
+                ++i;
             }
 
             for(auto j = i; j < a.getLength(); ++j) {
