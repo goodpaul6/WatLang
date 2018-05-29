@@ -63,13 +63,20 @@ class Parser
         std::vector<std::unique_ptr<AST>> args;
 
         while(curTok != ')') {
-            args.emplace_back(parseRelation(table, s));
+            args.emplace_back(parseExpr(table, s));
 
             if(curTok == ',') {
                 curTok = lexer.getToken(s);
             } else if(curTok != ')') {
                 throw PosError{lexer.getPos(), "Expected ',' or ')' in argument list."};
             }
+        }
+        
+        // HACK(Apaar): We automatically pass in extra arguments to any function called "assert".
+        if(funcName == "assert") {
+            int id = table.internString(lexer.getPos().filename);
+            args.emplace_back(new StrAST{pos, id});
+            args.emplace_back(new IntAST{pos, pos.line, AST::INT});
         }
 
         curTok = lexer.getToken(s);
@@ -93,7 +100,7 @@ class Parser
             auto pos = lexer.getPos();
             curTok = lexer.getToken(s);
 
-            auto inner = parseRelation(table, s);
+            auto inner = parseExpr(table, s);
 
             eatToken(s, ')', "Expected ')' to match previous '('.");
 
@@ -262,7 +269,22 @@ class Parser
         return lhs;
     }
 
-    friend struct OnReturn;
+    std::unique_ptr<AST> parseExpr(SymbolTable& table, std::istream& s)
+    {
+        auto lhs = parseRelation(table, s);
+
+        while(curTok == TOK_LOGICAL_AND || curTok == TOK_LOGICAL_OR) {
+            int op = curTok;
+
+            curTok = lexer.getToken(s);
+
+            auto rhs = parseRelation(table, s);
+
+            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+        }
+
+        return lhs;
+    }
  
     std::unique_ptr<AST> parseStatement(SymbolTable& table, std::istream& s)
     {
@@ -294,7 +316,7 @@ class Parser
 
             eatToken(s, '=', "Expected '=' after unary expression.");
 
-            auto rel = parseRelation(table, s);
+            auto rel = parseExpr(table, s);
 
             eatToken(s, ';', "Expected ';' after statement.");
 
@@ -372,7 +394,7 @@ class Parser
 
             eatToken(s, '(', "Expected '(' after 'if'.");
 
-            auto cond = parseRelation(table, s);
+            auto cond = parseExpr(table, s);
 
             eatToken(s, ')', "Expected ')' after 'if'.");
 
@@ -393,7 +415,7 @@ class Parser
 
             eatToken(s, '(', "Expected '(' after 'while'.");
 
-            auto cond = parseRelation(table, s);
+            auto cond = parseExpr(table, s);
 
             eatToken(s, ')', "Expected ')' after 'while'.");
 
@@ -457,7 +479,7 @@ class Parser
 
                 return std::unique_ptr<AST>{new ReturnAST{pos, nullptr}};
             } else {
-                auto val = parseRelation(table, s);
+                auto val = parseExpr(table, s);
 
                 eatToken(s, ';', "Expected ';' after return expression.");
 

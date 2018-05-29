@@ -223,7 +223,7 @@ private:
 
                 if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR || lhsType->tag == Typetag::BOOL) {
                     if(bst.getOp() == '+' || bst.getOp() == '-' || bst.getOp() == '*' || bst.getOp() == '/') {
-                        if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR) {
+                        if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR && rhsType->tag != Typetag::CHAR) {
                             throw PosError{ast.getPos(), "Attempted to apply binary operation to " + static_cast<std::string>(*rhsType) + " and an integer."};
                         }
 

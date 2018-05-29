@@ -343,7 +343,8 @@ private:
                 out << ".word 1\n";
             } break;
 
-            case TOK_GTE: {
+            case TOK_GTE:
+            case TOK_LOGICAL_AND: {
                 out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
 
                 int temp = curReg++;
@@ -353,6 +354,14 @@ private:
                 out << "sub $" << dest << ", $" << temp << ", $" << dest << "\n";
 
                 // dest reg=1 if greater than or equal to b
+                // or if a && b
+            } break;
+
+            case TOK_LOGICAL_OR: {
+                out << "bne $" << a << ", $0, 3\n";
+                out << "bne $" << b << ", $0, 2\n";
+                out << "lis $" << dest << "\n";
+                out << ".word 0\n";
             } break;
         }
 
@@ -369,6 +378,8 @@ private:
         out << ".word 4\n";
         out << "add $30, $30, $" << temp << "\n";
         out << "lw $31, -4($30)\n";
+
+        curReg = temp;
     }
 
     void compileStatement(SymbolTable& table, const AST& ast, std::ostream& out)

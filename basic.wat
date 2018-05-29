@@ -5,9 +5,17 @@ func exit() : void {
     asm "jr $31";
 }
 
-func assert(x : bool, message: *char) : void {
+func assert(x : bool, message : *char, filename: *char, line: int) : void {
     if(x == false) {
         puts("ASSERTION FAILED:");
+
+        puts("File:");
+        puts(filename);
+
+        puts("Line:");
+        putn(line);
+
+        puts("Message:");
         puts(message);
         exit();
     }
@@ -129,6 +137,19 @@ func putn(n : int) : void {
     asm "putnExit:";
 
     putc(cast(char) 10);
+}
+
+func strcmp(a : *char, b : *char) : int {
+    while(*a != 0 && *b != 0) {
+        if(*a != *b) {
+            return cast(int) (*a - *b);
+        }
+
+        a = a + 4;
+        b = b + 4;
+    }
+
+    return cast(int) (*a - *b);
 }
 
 func strcpy(dest : *char, src : *char) : void {

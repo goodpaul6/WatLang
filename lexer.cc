@@ -24,7 +24,9 @@ enum Token
     TOK_NOTEQUALS = -18,
     TOK_TRUE = -20,
     TOK_FALSE = -21,
-    TOK_EOF = -22
+    TOK_LOGICAL_AND = -22,
+    TOK_LOGICAL_OR = -23,
+    TOK_EOF = -24
 };
 
 struct Lexer
@@ -154,6 +156,16 @@ struct Lexer
         if(lastCh == '>' && last == '=') {
             last = s.get();
             return TOK_GTE;
+        }
+
+        if(lastCh == '|' && last == '|') {
+            last = s.get();
+            return TOK_LOGICAL_OR;
+        }
+
+        if(lastCh == '&' && last == '&') {
+            last = s.get();
+            return TOK_LOGICAL_AND;
         }
 
         if(lastCh == '/' && last == '/') {
