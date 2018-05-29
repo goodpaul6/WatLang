@@ -22,7 +22,9 @@ enum Token
     TOK_CHAR = -16,
     TOK_CAST = -17,
     TOK_NOTEQUALS = -18,
-    TOK_EOF = -19
+    TOK_TRUE = -20,
+    TOK_FALSE = -21,
+    TOK_EOF = -22
 };
 
 struct Lexer
@@ -56,6 +58,8 @@ struct Lexer
             if(lexeme == "return") return TOK_RETURN;
             if(lexeme == "asm") return TOK_ASM;
             if(lexeme == "cast") return TOK_CAST;
+            if(lexeme == "true") return TOK_TRUE;
+            if(lexeme == "false") return TOK_FALSE;
 
             return TOK_ID;
         }

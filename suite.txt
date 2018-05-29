@@ -10,3 +10,4 @@ buildstr.wat
 str.wat
 echo.wat
 malloc.wat
+assert.wat

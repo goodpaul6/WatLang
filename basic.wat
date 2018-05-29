@@ -1,3 +1,18 @@
+func exit() : void {
+    asm "lis $1";
+    asm ".word exitAddrGlobalXXXX";
+    asm "lw $31, 0($1)";
+    asm "jr $31";
+}
+
+func assert(x : bool, message: *char) : void {
+    if(x == false) {
+        puts("ASSERTION FAILED:");
+        puts(message);
+        exit();
+    }
+}
+
 func getc() : char {
     return *cast(*char) 0xffff0004;
 }

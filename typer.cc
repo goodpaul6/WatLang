@@ -221,7 +221,7 @@ private:
                     return std::unique_ptr<Typetag>{new Typetag{*lhsType}};
                 }
 
-                if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR) {
+                if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR || lhsType->tag == Typetag::BOOL) {
                     if(bst.getOp() == '+' || bst.getOp() == '-' || bst.getOp() == '*' || bst.getOp() == '/') {
                         if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR) {
                             throw PosError{ast.getPos(), "Attempted to apply binary operation to " + static_cast<std::string>(*rhsType) + " and an integer."};

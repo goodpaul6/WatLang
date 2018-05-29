@@ -13,6 +13,8 @@ for file in $(cat $1); do
 
     echo "Running bin/${file}.mips"
     mips.twoints "bin/${file}.mips" < "tests/${file}.in" > "${temp}" 2> /dev/null
+
+    echo "=============================================="
     
     cmp -s ${temp} "tests/${file}.out"
 

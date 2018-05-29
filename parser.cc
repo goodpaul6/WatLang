@@ -200,6 +200,9 @@ class Parser
 
                 curTok = lexer.getToken(s);
             }
+        } else if(curTok == TOK_TRUE || curTok == TOK_FALSE) {
+            lhs.reset(new IntAST{lexer.getPos(), curTok == TOK_TRUE, AST::BOOL});
+            curTok = lexer.getToken(s);
         } else {
             throw PosError{lexer.getPos(), "Unexpected token."};
         }

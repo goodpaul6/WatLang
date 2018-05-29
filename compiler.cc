@@ -44,13 +44,18 @@ private:
     // Makes room for symbols and sets their location values
     void resolveSymbolLocations(SymbolTable& table, std::ostream& out)
     {
+        // We keep track of return-to-os address
+        out << "lis $29\n";
+        out << ".word exitAddrGlobalXXXX\n";
+        out << "sw $31, 0($29)\n";
+
         out << "lis $29\n";
         out << ".word main\n";
         out << "jr $29\n";
 
         out << "; globals\n";
 
-        auto i = 12u;
+        auto i = 24u;
 
         for(auto& v : table.globals) {
             out << ".word 0\n";
@@ -65,13 +70,16 @@ private:
             s.loc = i;
             for(auto ch : s.str) {
                 out << ".word " << (int)ch << "\n";
-                i += 1;
+                i += 4;
             }
 
             // null-terminator
             out << ".word 0\n";
-            i += 1;
+            i += 4;
         }
+
+        out << "exitAddrGlobalXXXX: .word 0\n";
+        i += 4;
 
         for(auto& f : table.funcs) {
             auto reg = 1;
@@ -179,7 +187,7 @@ private:
     // Returns the register index into which the term's result is stored
     int compileTerm(SymbolTable& table, const AST& ast, std::ostream& out)
     {
-        if(ast.getType() == AST::INT) {
+        if(ast.getType() == AST::INT || ast.getType() == AST::BOOL) {
             out << "lis $" << curReg++ << "\n";
             out << ".word " << static_cast<const IntAST&>(ast).getValue() << "\n";
 
