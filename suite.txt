@@ -9,3 +9,4 @@ array.wat
 buildstr.wat
 str.wat
 echo.wat
+malloc.wat

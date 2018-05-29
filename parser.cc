@@ -258,9 +258,17 @@ class Parser
 
         return lhs;
     }
+
+    friend struct OnReturn;
  
     std::unique_ptr<AST> parseStatement(SymbolTable& table, std::istream& s)
     {
+        if(!curFunc) {
+            if(curTok != TOK_FUNC && curTok != TOK_VAR && curTok != TOK_DIRECTIVE) {
+                throw PosError{lexer.getPos(), "Unexpected top-level token near " + lexer.getLexeme()};
+            }
+        }
+
         if(curTok == '{') {
             auto pos = lexer.getPos();
 
@@ -269,7 +277,8 @@ class Parser
             curTok = lexer.getToken(s);
 
             while(curTok != '}') {
-                asts.emplace_back(std::move(parseStatement(table, s)));
+                auto ast = parseStatement(table, s);
+                asts.emplace_back(std::move(ast)); 
             }
 
             curTok = lexer.getToken(s);
@@ -280,13 +289,13 @@ class Parser
 
             auto lhs = parseUnary(table, s);
 
-            if(curTok != '=') {
-                throw PosError{lexer.getPos(), "Expected '=' after unary expression."};
-            }
+            eatToken(s, '=', "Expected '=' after unary expression.");
 
-            curTok = lexer.getToken(s);
+            auto rel = parseRelation(table, s);
 
-            return std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), parseRelation(table, s), '='}};
+            eatToken(s, ';', "Expected ';' after statement.");
+
+            return std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rel), '='}};
         } else if(curTok == TOK_VAR || curTok == TOK_ID) {
             auto pos = lexer.getPos();
 
@@ -317,11 +326,18 @@ class Parser
                 decl->typetag = parseType(table, s);
             }
 
-            if(decl && !curFunc) {
+            if(!curFunc) {
                 if(curTok == '=') {
                     throw PosError{lexer.getPos(), "Top level assignment expressions are not allowed."};
                 } else {
-                    // Keep going
+                    if(!curFunc) {
+                        // HACK(APAAR): We do this because we don't want to
+                        // be inconsistent about semicolons at the top-level.
+                        // Since this code isn't inside a block, it wouldn't
+                        // automatically be eaten.
+                        eatToken(s, ';', "Expected ';' after var decl.");
+                    }
+
                     return parseStatement(table, s);
                 }
             }
@@ -335,12 +351,18 @@ class Parser
 
                 auto rhs = parseTerm(table, s);
 
-                return std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), '='}};
+                eatToken(s, ';', "Expected ';' after var decl.");
+
+                return std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), '='}};
             } else if(curTok != '(') {
                 throw PosError{lexer.getPos(), "Expected call or assignment statement."};
             }
 
-            return parseCall(pos, table, std::move(name), s);
+            auto call = parseCall(pos, table, std::move(name), s);
+
+            eatToken(s, ';', "Expected ';' after call.");
+
+            return call;
         } else if(curTok == TOK_IF) {
             auto pos = lexer.getPos();
             curTok = lexer.getToken(s);
@@ -427,12 +449,16 @@ class Parser
             curTok = lexer.getToken(s);
 
             if(curTok == ';') {
-                curTok = lexer.getToken(s);
                 // No return value
+                curTok = lexer.getToken(s);
 
                 return std::unique_ptr<AST>{new ReturnAST{pos, nullptr}};
             } else {
-                return std::unique_ptr<AST>{new ReturnAST{pos, parseRelation(table, s)}};
+                auto val = parseRelation(table, s);
+
+                eatToken(s, ';', "Expected ';' after return expression.");
+
+                return std::unique_ptr<AST>{new ReturnAST{pos, std::move(val)}};
             }
         } else if(curTok == TOK_ASM) {
             auto pos = lexer.getPos();
@@ -442,6 +468,8 @@ class Parser
 
             auto str = lexer.getLexeme();
             curTok = lexer.getToken(s);
+            
+            eatToken(s, ';', "Expected ';' after asm string.");
 
             return std::unique_ptr<AST>{new AsmAST{pos, std::move(str)}};
         } else if(curTok == TOK_DIRECTIVE) {
@@ -482,7 +510,7 @@ class Parser
                 throw PosError{pos, "Invalid directive #" + lexer.getLexeme()};
             }
         } else {
-            throw PosError{lexer.getPos(), "Unexpected token near " + lexer.getLexeme()};
+            throw PosError{lexer.getPos(), "Unexpected token (" + std::to_string(curTok) + ") near " + lexer.getLexeme()};
         }
     }
 
@@ -498,7 +526,8 @@ public:
         curTok = lexer.getToken(s);
 
         while(curTok != TOK_EOF) {
-            asts.emplace_back(std::move(parseStatement(table, s)));
+            auto ast = parseStatement(table, s);
+            asts.emplace_back(std::move(ast));
         }
 
         return asts;

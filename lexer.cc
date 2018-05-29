@@ -158,6 +158,7 @@ struct Lexer
             }
 
             last = s.get();
+            pos.line += 1;
             return getToken(s);
         }
 

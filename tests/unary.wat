@@ -1,28 +1,12 @@
 #include "basic.wat"
 
 func main() : void {
-    var a : *int = cast(*int) 0
+    var a : *int = []{10, 20, 30, 40, 50};
 
-    asm "lis $3"
-    asm ".word start"
-    asm "jr $3"
-    
-    asm "array:"
-    asm ".word 10"
-    asm ".word 20"
-    asm ".word 30"
-    asm ".word 40"
-    asm ".word 50"
-
-    asm "start:"
-    
-    asm "lis $1"
-    asm ".word array"
-
-    var i : int = 0
+    var i : int = 0;
     while(i < 5) {
-        putn(*a)
-        a = a + 4
-        i = i - -1
+        putn(*a);
+        a = a + 4;
+        i = i - -1;
     }
 }

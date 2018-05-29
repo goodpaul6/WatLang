@@ -2,8 +2,16 @@
 
 for file in $(cat $1); do
     temp=$(mktemp)
+    
+    echo "Compiling ${file}"
+    
     ./wat < "tests/${file}" > "bin/${file}.asm"
+        
+    echo "Assembling bin/${file}.asm"
+
     cs241.binasm < "bin/${file}.asm" > "bin/${file}.mips"
+
+    echo "Running bin/${file}.mips"
     mips.twoints "bin/${file}.mips" < "tests/${file}.in" > "${temp}" 2> /dev/null
     
     cmp -s ${temp} "tests/${file}.out"

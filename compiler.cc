@@ -18,6 +18,10 @@ struct Compiler
         for(auto& ast : asts) {
             compileStatement(table, *ast, out);
         }
+
+        // This is used by the default allocator in the runtime
+        // to determine where it can start allocating memory
+        out << "memStartXXXX:\n";
     }
 
 private:

@@ -42,7 +42,10 @@ bool operator==(const Typetag& a, const Typetag& b)
     }
 
     if(a.tag == Typetag::PTR) {
-        return *a.inner == *b.inner;
+        // *void matches all pointer types
+        return (*a.inner == *b.inner) ||
+               (a.inner->tag == Typetag::VOID || 
+                (b.tag == Typetag::PTR && b.inner->tag == Typetag::VOID));
     }
 
     return true;

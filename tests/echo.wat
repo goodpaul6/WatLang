@@ -1,22 +1,22 @@
 #include "basic.wat"
 
 func main() : void {
-    var len : int = 0
-    var s : *char = [256] ""
+    var len : int = 0;
+    var s : *char = [256] "";
 
-    var c : char = getc()
+    var c : char = getc();
     
     while(c != cast (char) 10) {
         if(len >= 255) {
-            puts(s)
+            puts(s);
             return;
         }
 
-        *(s + len * 4) = c
-        len = len + 1
+        *(s + len * 4) = c;
+        len = len + 1;
 
-        c = getc()
+        c = getc();
     }
 
-    puts(s)
+    puts(s);
 }
