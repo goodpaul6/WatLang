@@ -343,8 +343,7 @@ private:
                 out << ".word 1\n";
             } break;
 
-            case TOK_GTE:
-            case TOK_LOGICAL_AND: {
+            case TOK_GTE: {
                 out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
 
                 int temp = curReg++;
@@ -357,7 +356,18 @@ private:
                 // or if a && b
             } break;
 
+            case TOK_LOGICAL_AND: {
+                out << "lis $" << dest << "\n";
+                out << ".word 0\n";
+                out << "beq $" << a << ", $0, 3\n";
+                out << "beq $" << b << ", $0, 2\n";
+                out << "lis $" << dest << "\n";
+                out << ".word 1\n";
+            } break;
+
             case TOK_LOGICAL_OR: {
+                out << "lis $" << dest << "\n";
+                out << ".word 1\n";
                 out << "bne $" << a << ", $0, 3\n";
                 out << "bne $" << b << ", $0, 2\n";
                 out << "lis $" << dest << "\n";
