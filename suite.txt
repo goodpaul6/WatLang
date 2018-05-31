@@ -13,3 +13,4 @@ malloc.wat
 assert.wat
 logical.wat
 strcmp.wat
+recmain.wat
