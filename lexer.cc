@@ -26,7 +26,8 @@ enum Token
     TOK_FALSE = -21,
     TOK_LOGICAL_AND = -22,
     TOK_LOGICAL_OR = -23,
-    TOK_EOF = -24
+    TOK_STRUCT = -24,
+    TOK_EOF = -25
 };
 
 struct Lexer
@@ -62,6 +63,7 @@ struct Lexer
             if(lexeme == "cast") return TOK_CAST;
             if(lexeme == "true") return TOK_TRUE;
             if(lexeme == "false") return TOK_FALSE;
+            if(lexeme == "struct") return TOK_STRUCT;
 
             return TOK_ID;
         }

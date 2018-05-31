@@ -294,7 +294,14 @@ class Parser
             }
         }
 
-        if(curTok == '{') {
+        if(curTok == TOK_STRUCT) {
+            if(curFunc) {
+                throw PosError{lexer.getPos(), "Can't declare structs inside a function. Sorry."};
+            }
+
+            // TODO(Apaar): Implement this
+            assert(0);
+        } else if(curTok == '{') {
             auto pos = lexer.getPos();
 
             std::vector<std::unique_ptr<AST>> asts;
