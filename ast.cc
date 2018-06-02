@@ -180,14 +180,14 @@ private:
 
 struct CastAST : public AST
 {
-    CastAST(Pos pos, std::unique_ptr<AST> value, std::unique_ptr<Typetag> targetType) : AST{CAST, pos}, value{std::move(value)}, targetType{std::move(targetType)} {}
+    CastAST(Pos pos, std::unique_ptr<AST> value, const Typetag* targetType) : AST{CAST, pos}, value{std::move(value)}, targetType{targetType} {}
 
-    const Typetag& getTargetType() const { return *targetType; }
+    const Typetag* getTargetType() const { return targetType; }
     const AST& getValue() const { return *value; }
 
 private:
     std::unique_ptr<AST> value;
-    std::unique_ptr<Typetag> targetType;
+    const Typetag* targetType;
 };
 
 // If the length value for the array ast is -1, it is determined based

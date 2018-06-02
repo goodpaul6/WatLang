@@ -1,0 +1,7 @@
+Features:
+- Structs
+
+Flaws:
+- We allow assiging *void to any type of pointer, but maybe the pointer count should match up 
+(i.e. *void should only work with *something, not **something)
+

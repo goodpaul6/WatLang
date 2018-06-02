@@ -1,60 +1,6 @@
-#include <memory>
 #include <cassert>
 
-struct Typetag
-{
-    enum Tag
-    {
-        VOID,
-        BOOL,
-        CHAR,
-        INT,
-        PTR
-    } tag;
-
-    std::unique_ptr<Typetag> inner;
-
-    Typetag() = default;
-    Typetag(Tag tag) : tag{tag} {}
-    Typetag(const Typetag& other) :
-        tag{other.tag},
-        inner{other.inner ? new Typetag{*other.inner} : nullptr}
-    {
-    }
-
-    operator std::string() const
-    {
-        switch(tag) {
-            case VOID: return "void";
-            case BOOL: return "bool";
-            case CHAR: return "char";
-            case INT: return "int";
-            case PTR: return "*" + static_cast<std::string>(*inner);
-            default: assert(0); return "ERROR"; break;
-        }
-    }
-};
-
-bool operator==(const Typetag& a, const Typetag& b)
-{
-    if(a.tag != b.tag) {
-        return false;
-    }
-
-    if(a.tag == Typetag::PTR) {
-        // *void matches all pointer types
-        return (*a.inner == *b.inner) ||
-               (a.inner->tag == Typetag::VOID || 
-                (b.tag == Typetag::PTR && b.inner->tag == Typetag::VOID));
-    }
-
-    return true;
-}
-
-bool operator!=(const Typetag& a, const Typetag& b)
-{
-    return !(a == b);
-}
+#include "typer.h"
 
 struct Typer
 {
@@ -85,7 +31,7 @@ struct Typer
                 if(rst.getValue()) {
                     auto valueType = inferType(table, *rst.getValue());
 
-                    if(*valueType != *curFunc->returnType) {
+                    if(valueType != curFunc->returnType) {
                         throw PosError{ast.getPos(), "Returned value is of type " + static_cast<std::string>(*valueType) + " but the surrounding function returns " +
                             static_cast<std::string>(*curFunc->returnType)};
                     }
@@ -104,7 +50,8 @@ struct Typer
                 auto lhsType = inferType(table, bst.getLhs());
                 auto rhsType = inferType(table, bst.getRhs());
 
-                if(*lhsType != *rhsType) {
+                // We allow assigning *void to any type of pointer
+                if(lhsType != rhsType && !(lhsType->tag == Typetag::PTR && rhsType->tag == Typetag::PTR && rhsType->inner->tag == Typetag::VOID)) {
                     throw PosError{bst.getPos(), "Mismatched types in assignment statement: " + static_cast<std::string>(*lhsType) + " " + static_cast<std::string>(*rhsType)};
                 }
             } break;
@@ -153,7 +100,7 @@ struct Typer
                 for(auto i = 0u; i < cst.getArgs().size(); ++i) {
                     auto suppliedType = inferType(table, *cst.getArgs()[i]);
 
-                    if(*suppliedType != *func->args[i].typetag) {
+                    if(suppliedType != func->args[i].typetag) {
                         throw PosError{cst.getArgs()[i]->getPos(), "Argument " + std::to_string(i + 1) + " to " + func->name + " is supposed to be a " + static_cast<std::string>(*func->args[i].typetag) + " but you supplied a " + static_cast<std::string>(*suppliedType)};
                     }
                 }
@@ -166,18 +113,13 @@ struct Typer
 private:
     Func* curFunc = nullptr;
 
-    std::unique_ptr<Typetag> inferType(SymbolTable& table, const AST& ast)
+    const Typetag* inferType(SymbolTable& table, const AST& ast)
     {
         switch(ast.getType()) {
-            case AST::INT: return std::unique_ptr<Typetag>{new Typetag{Typetag::INT}};
-            case AST::BOOL: return std::unique_ptr<Typetag>{new Typetag{Typetag::BOOL}};
-            case AST::CHAR: return std::unique_ptr<Typetag>{new Typetag{Typetag::CHAR}};
-            case AST::STR: { 
-                auto type = std::make_unique<Typetag>(Typetag::PTR);
-                type->inner = std::make_unique<Typetag>(Typetag::CHAR);
-
-                return type;
-            } break;
+            case AST::INT: return table.getPrimTag(Typetag::INT);
+            case AST::BOOL: return table.getPrimTag(Typetag::BOOL);
+            case AST::CHAR: return table.getPrimTag(Typetag::CHAR);
+            case AST::STR: return table.getPtrTag(table.getPrimTag(Typetag::CHAR));
 
             case AST::ID: {
                 auto var = table.getVar(static_cast<const IdAST&>(ast).getName(), curFunc);
@@ -186,25 +128,19 @@ private:
                     throw PosError{ast.getPos(), "Referenced non-existent variable " + static_cast<const IdAST&>(ast).getName()};
                 }
 
-                return std::unique_ptr<Typetag>{new Typetag{*var->typetag}};
+                return var->typetag;
             } break;
 
             case AST::CAST: {
-                return std::unique_ptr<Typetag>{new Typetag{static_cast<const CastAST&>(ast).getTargetType()}};
+                return static_cast<const CastAST&>(ast).getTargetType();
             } break;
 
             case AST::ARRAY: {
-                auto type = std::make_unique<Typetag>(Typetag::PTR);
-                type->inner = std::make_unique<Typetag>(Typetag::INT);
-
-                return type;
+                return table.getPtrTag(table.getPrimTag(Typetag::INT));
             } break;
 
             case AST::ARRAY_STRING: {
-                auto type = std::make_unique<Typetag>(Typetag::PTR);
-                type->inner = std::make_unique<Typetag>(Typetag::CHAR);
-
-                return type;
+                return table.getPtrTag(table.getPrimTag(Typetag::CHAR));
             } break;
 
             case AST::BIN: {
@@ -218,7 +154,7 @@ private:
                         throw PosError{ast.getPos(), "Attempted to perform binary operation on pointer with a " + static_cast<std::string>(*rhsType)};
                     }
 
-                    return std::unique_ptr<Typetag>{new Typetag{*lhsType}};
+                    return lhsType;
                 }
 
                 if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR || lhsType->tag == Typetag::BOOL) {
@@ -227,12 +163,10 @@ private:
                             throw PosError{ast.getPos(), "Attempted to apply binary operation to " + static_cast<std::string>(*rhsType) + " and an integer."};
                         }
 
-                        return rhsType->tag == Typetag::PTR ? 
-                            std::unique_ptr<Typetag>{new Typetag{*rhsType}} : 
-                            std::unique_ptr<Typetag>{new Typetag{*lhsType}};
+                        return rhsType->tag == Typetag::PTR ? rhsType : lhsType;
                     } else {
                         // Relational/Logical operators
-                        return std::unique_ptr<Typetag>{new Typetag{Typetag::BOOL}};
+                        return table.getPrimTag(Typetag::BOOL);
                     }
                 }
 
@@ -254,7 +188,7 @@ private:
                             "Attempted to dereference a " + static_cast<std::string>(*rhsType)};
                     }
 
-                    return std::unique_ptr<Typetag>{new Typetag{*rhsType->inner}};
+                    return rhsType->inner;
                 }
 
                 if(ust.getOp() == '-') {
@@ -263,7 +197,7 @@ private:
                             "Attempted to negate a " + static_cast<std::string>(*rhsType)};
                     }
 
-                    return std::unique_ptr<Typetag>{new Typetag{*rhsType}};
+                    return rhsType; 
                 }
 
                 if(ust.getOp() == '!') {
@@ -284,7 +218,7 @@ private:
                 // checkTypes should make sure this exists
                 assert(func);
 
-                return std::unique_ptr<Typetag>{new Typetag{*func->returnType}};
+                return func->returnType;
             } break;
 
             default: assert(0); break;

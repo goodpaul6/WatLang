@@ -24,29 +24,29 @@ class Parser
         curTok = lexer.getToken(s);
     }
 
-    std::unique_ptr<Typetag> parseType(SymbolTable& table, std::istream& s)
+    const Typetag* parseType(SymbolTable& table, std::istream& s)
     {
         if(curTok == '*') {
-            auto tag = std::make_unique<Typetag>(Typetag::PTR);
-
             curTok = lexer.getToken(s);
 
-            tag->inner = parseType(table, s);
+            auto inner = parseType(table, s);
 
-            return tag;
+            return table.getPtrTag(inner);
         } else {
             expectToken(TOK_ID, "Expected a type identifier.");
 
-            std::unique_ptr<Typetag> tag;
-
+            const Typetag* tag = nullptr;
+            
             if(lexer.getLexeme() == "int") {
-                tag.reset(new Typetag{Typetag::INT});
+                tag = table.getPrimTag(Typetag::INT);
             } else if(lexer.getLexeme() == "char") {
-                tag.reset(new Typetag{Typetag::CHAR});
+                tag = table.getPrimTag(Typetag::CHAR);
             } else if(lexer.getLexeme() == "bool") { 
-                tag.reset(new Typetag{Typetag::BOOL});
+                tag = table.getPrimTag(Typetag::BOOL);
             } else if(lexer.getLexeme() == "void") {
-                tag.reset(new Typetag{Typetag::VOID});
+                tag = table.getPrimTag(Typetag::VOID);
+            } else {
+                throw PosError{lexer.getPos(), lexer.getLexeme() + " does not denote a typename."};
             }
 
             curTok = lexer.getToken(s);
@@ -115,7 +115,7 @@ class Parser
 
             eatToken(s, ')', "Expected ')' to match previous '('");
 
-            lhs.reset(new CastAST{pos, parseUnary(table, s), std::move(type)});
+            lhs.reset(new CastAST{pos, parseUnary(table, s), type});
         } else if(curTok == TOK_INT) {
             lhs.reset(new IntAST{lexer.getPos(), lexer.getInt(), AST::INT});
             curTok = lexer.getToken(s);

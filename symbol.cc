@@ -2,10 +2,11 @@
 #include <vector>
 #include <memory>
 
+#include "typer.h"
+
 struct Func;
 
 struct AST;
-struct Typetag;
 
 struct Var
 {
@@ -14,8 +15,8 @@ struct Var
 
     Func* func;
     int loc;    // Initialized to -1; could store register index or memory location as determined by compiler
-
-    std::unique_ptr<Typetag> typetag;
+    
+    const Typetag* typetag;
 };
 
 struct Func
@@ -28,7 +29,7 @@ struct Func
 
     int firstReg; // First unused register (after registers for arguments and locals have been allocated), -1 by default, assigned by compiler
 
-    std::unique_ptr<Typetag> returnType;
+    const Typetag* returnType;
 };
 
 struct CString
@@ -47,7 +48,7 @@ struct SymbolTable
             }
         }
 
-        funcs.emplace_back(Func{std::move(pos), std::move(name), {}, {}, -1});
+        funcs.emplace_back(Func{std::move(pos), std::move(name), {}, {}, -1, nullptr});
         return funcs.back();
     }
 
@@ -59,7 +60,7 @@ struct SymbolTable
             }
         }
 
-        func.args.emplace_back(Var{pos, std::move(name), &func, -1});
+        func.args.emplace_back(Var{pos, std::move(name), &func, -1, nullptr});
         return func.args.back();
     }
 
@@ -72,7 +73,7 @@ struct SymbolTable
                 }
             }
 
-            func->locals.emplace_back(Var{pos, std::move(name), func, -1});
+            func->locals.emplace_back(Var{pos, std::move(name), func, -1, nullptr});
 
             return func->locals.back();
         }
@@ -142,10 +143,40 @@ struct SymbolTable
         return strings[id];
     }
 
+    const Typetag* getPrimTag(Typetag::Tag tag)
+    {
+        static Typetag v{Typetag::VOID};
+        static Typetag b{Typetag::BOOL};
+        static Typetag c{Typetag::CHAR};
+        static Typetag i{Typetag::INT};
+
+        switch(tag) {
+            case Typetag::VOID: return &v;
+            case Typetag::BOOL: return &b;
+            case Typetag::CHAR: return &c;
+            case Typetag::INT: return &i;
+            default: assert(0); return nullptr;
+        }
+    }
+
+    const Typetag* getPtrTag(const Typetag* inner)
+    {
+        for(auto& tag : tags) {
+            if(tag->tag == Typetag::PTR && tag->inner == inner) {
+                return tag.get();
+            }
+        }
+
+        tags.emplace_back(new Typetag{Typetag::PTR, inner});
+        return tags.back().get();
+    }
+
 private:
     friend struct Compiler;
 
     std::vector<Var> globals;
     std::vector<Func> funcs;
     std::vector<CString> strings;
+
+    std::vector<std::unique_ptr<Typetag>> tags;
 };
