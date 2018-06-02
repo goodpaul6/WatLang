@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cassert>
+#include <string>
+#include <vector>
 
 struct Typetag
 {
@@ -10,10 +12,22 @@ struct Typetag
         BOOL,
         CHAR,
         INT,
-        PTR
+        PTR,
+        STRUCT
     } tag;
 
-    const Typetag* inner = nullptr;
+    const Typetag* inner;
+
+    using Fields = std::vector<std::pair<std::string, const Typetag*>>;
+
+    std::string structName;
+    Fields structFields;
+    Pos structDeclPos;
+
+    explicit Typetag(Tag tag, const Typetag* inner = nullptr) :
+        tag{tag}, inner{inner} {}
+
+    explicit Typetag(Pos pos, std::string name) : tag{STRUCT}, structName{std::move(name)}, structDeclPos{std::move(pos)} {}
 
     operator std::string() const
     {
@@ -23,7 +37,27 @@ struct Typetag
             case CHAR: return "char";
             case INT: return "int";
             case PTR: return "*" + static_cast<std::string>(*inner);
+            case STRUCT: return structName;
             default: assert(0); return "ERROR"; break;
+        }
+    }
+
+    int getSizeInWords() const
+    {
+        switch(tag) {
+            case VOID: assert(0); return 0; break;
+
+            case STRUCT: {
+                int totalSize = 0;
+
+                for(auto& field : structFields) {
+                    totalSize += field.second->getSizeInWords();
+                }
+
+                return totalSize;
+            } break;
+
+            default: return 1;
         }
     }
 };

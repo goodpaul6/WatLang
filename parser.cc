@@ -46,7 +46,7 @@ class Parser
             } else if(lexer.getLexeme() == "void") {
                 tag = table.getPrimTag(Typetag::VOID);
             } else {
-                throw PosError{lexer.getPos(), lexer.getLexeme() + " does not denote a typename."};
+                tag = table.getStruct(lexer.getPos(), lexer.getLexeme());
             }
 
             curTok = lexer.getToken(s);
@@ -299,8 +299,47 @@ class Parser
                 throw PosError{lexer.getPos(), "Can't declare structs inside a function. Sorry."};
             }
 
-            // TODO(Apaar): Implement this
-            assert(0);
+            auto pos = lexer.getPos();
+
+            curTok = lexer.getToken(s);
+
+            expectToken(TOK_ID, "Expected identifier after struct.");
+
+            auto structName = lexer.getLexeme();
+
+            curTok = lexer.getToken(s);
+
+            eatToken(s, '{', "Expected '{' after struct " + structName);
+
+            Typetag::Fields fields;
+
+            while(curTok != '}') {
+                expectToken(TOK_ID, "Expected id inside struct.");
+
+                auto name = lexer.getLexeme();
+
+                curTok = lexer.getToken(s);
+
+                eatToken(s, ':', "Expected ':' after id in struct field.");
+
+                auto tagPos = lexer.getPos();
+
+                auto tag = parseType(table, s);
+
+                if(tag->tag == Typetag::VOID) {
+                    throw PosError(tagPos, "Cannot have struct field of type 'void'.");
+                }
+
+                eatToken(s, ';', "Expected ';' after struct field.");
+
+                fields.emplace_back(std::move(name), tag);
+            }
+
+            curTok = lexer.getToken(s);
+
+            table.defineStruct(std::move(pos), std::move(structName), std::move(fields));
+
+            return parseStatement(table, s);
         } else if(curTok == '{') {
             auto pos = lexer.getPos();
 
@@ -355,7 +394,13 @@ class Parser
             if(decl) {
                 eatToken(s, ':', "Expected ':' after var " + name);
 
+                auto typePos = lexer.getPos();
+
                 decl->typetag = parseType(table, s);
+
+                if(decl->typetag->tag == Typetag::VOID) {
+                    throw PosError{typePos, "Attempted to declare variable of type 'void'."};
+                }
             }
 
             if(!curFunc) {

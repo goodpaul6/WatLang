@@ -1,7 +1,59 @@
 Features:
-- Structs
+- Structs:
+
+"struct" syntax:
+
+struct Vec2
+{
+    x : int;
+    y : int;
+}
+
+construction syntax:
+
+var x : Vec2 = Vec2{x=10,y=0};   // Specify fields by name
+var y : Vec2 = Vec2{};           // All fields unspecified are set to 0
+
+// both x and y are actually pointers to the structure allocated on the stack.
+// The allocation is done by "make".
+
+"dot" syntax:
+
+x.x = 10;
+x.y = 20;
+
+// The above is compiled as
+*(x + 0) = 10;
+*(y + 4) = 10;
+
+// The only issue with compiling it like this is that we need to have the struct
+// definition to do it. That's fine though. It _should_ be defined.
+
+func putvec(v : Vec2, scale : int) : void {
+    v.x = v.x * scale;
+    v.y = v.y * scale;
+
+    putn(v.x);
+    putn(v.y);
+}
+
+putvec(Vec2{10, 20}, 2);
+
+// The Vec2{10, 20} is compiled as something like:
+lis reg
+.word end
+jr reg
+
+label:
+.word 10
+.word 20
+
+end:
+
 
 Flaws:
+- If someone makes an array or string, instead of putting the .words right where the defintion is, we should put them at the end of the program so that we don't need to jump over them
+
 - We allow assiging *void to any type of pointer, but maybe the pointer count should match up 
 (i.e. *void should only work with *something, not **something)
 - We also allow passing any pointer to be passed into a *void arg but that's a little weird

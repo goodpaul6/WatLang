@@ -11,6 +11,13 @@ struct Compiler
             throw std::runtime_error{"Missing main function."};
         }
 
+        // Make sure that all structs are defined
+        for(auto& tag : table.tags) {
+            if(tag->tag == Typetag::STRUCT && tag->structFields.empty()) {
+                throw PosError{tag->structDeclPos, "Referenced undefined struct " + tag->structName};
+            }
+        }
+
         resolveSymbolLocations(table, out);
 
         out << "; code\n";

@@ -171,6 +171,50 @@ struct SymbolTable
         return tags.back().get();
     }
 
+    const Typetag* getStruct(Pos pos, const std::string& name)
+    {
+        // If a type that hasn't been defined yet is referenced, we make a placeholder struct
+        // for it which will be filled out if it does get defined. Otherwise, we'll complain about
+        // it during the compilation step.
+        for(auto& tag : tags) {
+            if(tag->tag == Typetag::STRUCT && tag->structName == name) {
+                return tag.get();
+            }
+        }
+
+        tags.emplace_back(new Typetag{std::move(pos), name});
+        return tags.back().get();
+    }
+
+    const Typetag* defineStruct(Pos pos, const std::string& name, Typetag::Fields fields)
+    {
+        if(fields.empty()) {
+            throw PosError{pos, "Struct definitions must contain at least one field."};
+        }
+
+        Typetag* sTag = nullptr;
+
+        for(auto& tag : tags) {
+            if(tag->tag == Typetag::STRUCT && tag->structName == name) {
+                if(!tag->structFields.empty()) {
+                    throw PosError{pos, "Attempted to redefine struct " + name};
+                } else {
+                    sTag = tag.get();
+                    break;
+                }
+            }
+        }
+
+        if(!sTag) {
+            tags.emplace_back(new Typetag{std::move(pos), name});
+            sTag = tags.back().get();
+        }
+
+        sTag->structFields = std::move(fields);
+
+        return sTag;
+    }
+
 private:
     friend struct Compiler;
 
