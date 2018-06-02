@@ -40,16 +40,18 @@ func putvec(v : Vec2, scale : int) : void {
 putvec(Vec2{10, 20}, 2);
 
 // The Vec2{10, 20} is compiled as something like:
-lis reg
-.word end
-jr reg
-
-label:
+lis $1
 .word 10
+sw $1, -4($30)
+lis $1
 .word 20
+sw $1, -8($30)
+lis $1
+.word 8
+sub $30, $30, $1
+add $1, $30, $0
 
-end:
-
+; assume that the argument is stored in $1
 
 Flaws:
 - If someone makes an array or string, instead of putting the .words right where the defintion is, we should put them at the end of the program so that we don't need to jump over them
