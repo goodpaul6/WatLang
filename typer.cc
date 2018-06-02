@@ -100,7 +100,8 @@ struct Typer
                 for(auto i = 0u; i < cst.getArgs().size(); ++i) {
                     auto suppliedType = inferType(table, *cst.getArgs()[i]);
 
-                    if(suppliedType != func->args[i].typetag) {
+                    if(suppliedType != func->args[i].typetag &&
+                       (suppliedType->tag != Typetag::PTR && func->args[i].typetag->tag != Typetag::PTR && func->args[i].typetag->inner->tag != Typetag::VOID)) {
                         throw PosError{cst.getArgs()[i]->getPos(), "Argument " + std::to_string(i + 1) + " to " + func->name + " is supposed to be a " + static_cast<std::string>(*func->args[i].typetag) + " but you supplied a " + static_cast<std::string>(*suppliedType)};
                     }
                 }
