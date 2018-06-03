@@ -17,15 +17,21 @@ struct Codegen
             s >> temp;
             
             if(isdigit(temp[0])) {
-                auto value = std::stol(temp, nullptr, 0);
+                long long value;
+                try {
+                    value = std::stoll(temp, nullptr, 0);
+                } catch(...) {
+                    throw PosError{pos, "Failed to convert to value: " + temp};
+                }
 
-                if(value < -2147483648 || value > 4294967295) {
+                if(value < -2147483647L && value > 4294967295) {
                     throw PosError{pos, "Word value out of range: " + std::to_string(value)};
                 }
 
                 word(static_cast<int32_t>(value));
             } else if(isalpha(temp[0])) {
                 patches.emplace_back(Patch::WORD, code.size(), temp);
+                word(0);
             }
         } else if(temp[temp.size() - 1] == ':') {
             labelHere(temp.substr(0, temp.size() - 1));
@@ -85,15 +91,15 @@ struct Codegen
             } else {
                 auto off = std::stoi(temp, nullptr, 0);
 
-                if(off < -32768 || off > 32767) {
+                if(off < -32768 && off > 32767) {
                     throw PosError{pos, "Branch offset out of range"};
                 }
 
                 imm = static_cast<int16_t>(off);
             }
 
-            if(instr == "beq") beq(regs[0], regs[1], off);
-            else if(instr == "bne") bne(regs[0], regs[1], off);
+            if(instr == "beq") beq(regs[0], regs[1], imm);
+            else if(instr == "bne") bne(regs[0], regs[1], imm);
         } else if(temp == "lw" || temp == "sw") {
             auto instr = temp;
 
@@ -105,7 +111,7 @@ struct Codegen
 
             s >> off;
 
-            if(off < -32768 || off > 32767) {
+            if(off < -32768 && off > 32767) {
                 throw PosError{pos, "Memory offset out of range"};
             }
 
@@ -116,7 +122,7 @@ struct Codegen
             s >> c;
 
             if(c != '(') {
-                throw PosError{s, "Expected '(' after offset"};
+                throw PosError{pos, "Expected '(' after offset"};
             }
 
             temp.clear();
@@ -131,13 +137,17 @@ struct Codegen
 
             if(instr == "lw") lw(t, imm, sr);
             else if(instr == "sw") sw(t, imm, sr);
-        } else if(temp == "jr" || temp == "jalr") {
+        } else if(temp == "jr" || temp == "jalr" || temp == "mfhi" || temp == "mflo") {
             auto instr = temp;
 
             s >> temp;
 
             if(instr == "jr") jr(parseReg(pos, temp));
             else if(instr == "jalr") jalr(parseReg(pos, temp));
+            else if(instr == "mfhi") mfhi(parseReg(pos, temp));
+            else if(instr == "mflo") mflo(parseReg(pos, temp));
+        } else {
+            throw PosError{pos, "Expected instruction but got " + temp};
         }
     }
 
@@ -153,7 +163,7 @@ struct Codegen
             throw std::runtime_error{"Defined multiple labels with the name " + name};
         }
 
-        labels.emplace_back(std::move(name), static_cast<int32_t>(code.size()));
+        labels[std::move(name)] = static_cast<int32_t>(code.size());
     }
     
     void lis(int reg)
@@ -262,7 +272,7 @@ struct Codegen
         code.emplace_back(rInst(Instruction::JALR, s, 0, 0));
     }
 
-    std::vector<Instruction> compile() const
+    std::vector<Instruction> getPatchedCode() const
     {
         // This just patches all the labels with the correct address
         auto result = code;
@@ -280,13 +290,14 @@ struct Codegen
                 } break;
 
                 case Patch::BRANCH: {
-                    auto off = (found->second * sizeof(Instruction) - patch.getPos() * sizeof(Instruction) - sizeof(Instruction)) / sizeof(Instruction);
+					int32_t isize = sizeof(Instruction);
+                    int32_t off = (found->second * isize - static_cast<int32_t>(patch.getPos()) * isize - isize) / isize;
                     
-                    if(off < -32768 || off > 32767) {
-                        throw std::runtime_error{"Branch to label " + found->first + " is out of branch offset range"};
+                    if(off < -32768 && off > 32767) {
+                        throw std::runtime_error{"Branch to label " + found->first + " is out of branch offset range (" + std::to_string(off) + ")"};
                     }
                     
-                    result[patch.getPos()].imm = static_cast<int16_t>(off);
+					result[patch.getPos()].word |= static_cast<int16_t>(off) & 0xffff;
                 } break;
             }
         }
@@ -322,8 +333,6 @@ private:
     Instruction wInst(int32_t value)
     {
         Instruction i;
-
-        i.type = Instruction::WORD;
         i.word = value;
     
         return i;
@@ -332,11 +341,7 @@ private:
     Instruction iInst(Instruction::Type type, int s, int t, int16_t imm)
     {
         Instruction i;
-
-        i.type = type;
-        i.s = s;
-        i.t = t;
-        i.imm = imm;
+        i.word = ((type & 0xf) << 28) | ((s & 0x1f) << 23) | ((t & 0x1f) << 18) | (imm & 0xffff);
 
         return i;
     }
@@ -344,11 +349,7 @@ private:
     Instruction rInst(Instruction::Type type, int s, int t, int d)
     {
         Instruction i;
-
-        i.type = type;
-        i.s = s;
-        i.t = t;
-        i.d = d;
+        i.word = ((type & 0xf) << 28) | ((s & 0x1f) << 23) | ((t & 0x1f) << 18) | ((d & 0x1f) << 13);
 
         return i;
     }
@@ -356,13 +357,13 @@ private:
     int parseReg(const Pos& pos, const std::string& str)
     {
         if(str[0] != '$') {
-            throw PosError{"Expected '$' in register operand"};
+            throw PosError{pos, "Expected '$' in register operand"};
         }
 
-        auto reg = std::stoi(str);
+        auto reg = std::stoi(str.substr(1));
         
         if(reg < 0 || reg > 31) {
-            throw PosError{"Invalid register: " + str};
+            throw PosError{pos, "Invalid register: " + str};
         }
 
         return reg;

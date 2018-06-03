@@ -40,9 +40,9 @@ func puts(s : *char) : void {
 
     asm "putsLoop:";
     asm "lw $4 0($1)";
-    asm "beq $4 $0, putsEnd";
+    asm "beq $4 $0 putsEnd";
     asm "sw $4 0($3)";
-    asm "add $1 $1, $5";
+    asm "add $1 $1 $5";
     asm "lis $4";
     asm ".word putsLoop";
     asm "jr $4";

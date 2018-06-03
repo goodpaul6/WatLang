@@ -15,11 +15,18 @@ int main(int argc, char** argv)
     using namespace std;
 
     try {
+        if(argc != 2) {
+            std::cerr << "Usage: " << argv[0] << " [file.wat]\n";
+            return 1;
+        }
+
+        std::ifstream file{argv[1]};
+
         SymbolTable table;
 
         Parser parser;
 
-        auto asts = parser.parseUntilEof(table, cin);
+        auto asts = parser.parseUntilEof(table, file);
 
         Typer typer;
 
@@ -27,9 +34,15 @@ int main(int argc, char** argv)
             typer.checkTypes(table, *a);
         }
 
+        Codegen gen;
+
         Compiler compiler;
 
-        compiler.compile(table, asts, cout);
+        compiler.compile(table, asts, gen);
+
+        auto code = gen.getPatchedCode();
+
+        run(&code[0], code.size() * sizeof(Instruction));
     } catch(const PosError& e) {
         if(e.getPos().filename.empty()) {
             cerr << e.getPos().line << ": " << e.getMessage() << "\n";

@@ -1,3 +1,4 @@
+#include <string>
 #include <cassert>
 #include <iostream>
 
@@ -5,7 +6,7 @@ struct Instruction
 {
     enum Type
     {
-        LIS, WORD,
+        LIS,
         ADD, SUB, MULT, DIV, SLT,
         MFHI, MFLO,
         LW, SW,
@@ -13,21 +14,26 @@ struct Instruction
         JR, JALR
     };
 
-    Type type;
+    // rFormat:
+    // oooo ssss sttt ttdd ddd0 0000 0000 0000
+    // iFormat:
+    // oooo ssss sttt tt00 iiii iiii iiii iiii
+    int32_t word;
 
-    union
+    Type getType() const
     {
-        int32_t word;
-        struct 
-        { 
-            uint8_t s, t;
-            union { uint8_t d; int16_t imm; };
-        };
-    };
+        return static_cast<Type>((word >> 28) & 0xf);
+    }
+
+    uint8_t getS() const { return (word >> 23) & 0x1f; }
+    uint8_t getT() const { return (word >> 18) & 0x1f; }
+    uint8_t getD() const { return (word >> 13) & 0x1f; }
+
+    int16_t getImm() const { return word & 0xffff; }
 };
 
 void run(const Instruction* code, size_t codeSize)
-{
+{    
     const size_t isize = sizeof(Instruction);
 
     const int32_t exitAddress = -1;
@@ -38,12 +44,12 @@ void run(const Instruction* code, size_t codeSize)
     int32_t pc = 0;
     int32_t regs[32] = { 0 };
     
-    uint8_t mem[1 << 20];
+    static uint8_t mem[1 << 16];
 
     memcpy(mem, code, codeSize);
 
     // Initialize the special registers
-    regs[30] = 1 << 20;
+    regs[30] = 1 << 16;
     regs[31] = exitAddress;
  
     while(true) {
@@ -51,74 +57,86 @@ void run(const Instruction* code, size_t codeSize)
             return;
         }
 
-        auto instr = *static_cast<Instruction*>(&mem[pc]);
+        auto instr = *reinterpret_cast<Instruction*>(&mem[pc]);
+        
+        auto s = instr.getS();
+        auto t = instr.getT();
+        auto d = instr.getD();
+
+        int16_t imm = instr.getImm();
 
         regs[0] = 0;
 
-        switch(instr.type) {
+        switch(instr.getType()) {
+			default: {
+				throw std::runtime_error{ "Invalid instruction type: " + std::to_string(instr.getType()) };
+			} break;
+			
             case Instruction::LIS: {
                 pc += isize;
-                regs[instr.d] = static_cast<Instruction*>(&mem[pc])->word;
+				regs[d] = *reinterpret_cast<int32_t*>(&mem[pc]);
                 pc += isize;
             } break;
 
             case Instruction::ADD: {
-                regs[instr.d] = regs[instr.s] + regs[instr.t];
+                regs[d] = regs[s] + regs[t];
                 pc += isize;
             } break;
 
             case Instruction::SUB: {
-                regs[instr.d] = regs[instr.s] - regs[instr.t];
+                regs[d] = regs[s] - regs[t];
                 pc += isize;
             } break;
 
             case Instruction::MULT: {
-                int64_t result = static_cast<int64_t>(regs[instr.s]) * regs[instr.t];
+                int64_t result = static_cast<int64_t>(regs[s]) * regs[t];
                 lo = static_cast<int32_t>(result);
                 hi = static_cast<int32_t>(result >> 32);
                 pc += isize;
             } break;
 
             case Instruction::DIV: {
-                lo = regs[instr.s] / regs[instr.t];
-                hi = regs[instr.s] % regs[instr.t];
+                lo = regs[s] / regs[t];
+                hi = regs[s] % regs[t];
                 pc += isize;
             } break;
 
             case Instruction::SLT: {
-                regs[instr.d] = regs[instr.s] < regs[instr.t];
+                regs[d] = regs[s] < regs[t];
                 pc += isize;
             } break;
 
             case Instruction::MFHI: {
-                regs[instr.d] = hi;
+                regs[d] = hi;
                 pc += isize;
             } break;
 
             case Instruction::MFLO: {
-                regs[instr.d] = lo;
+                regs[d] = lo;
                 pc += isize;
             } break;
 
             case Instruction::LW: {
-                int32_t addr = regs[instr.s] + instr.imm;
+                uint32_t addr = static_cast<uint32_t>(regs[s]);
+                addr += imm;
                 
                 if(addr == getcAddress) {
-                    regs[instr.t] = getchar();
+                    regs[t] = getchar();
                 } else {
-                    regs[instr.t] = *static_cast<int32_t*>(mem[addr]);
+                    regs[t] = *reinterpret_cast<int32_t*>(&mem[addr]);
                 }
 
                 pc += isize;
             } break;
 
             case Instruction::SW: {
-                int32_t addr = regs[instr.s] + instr.imm;
+                uint32_t addr = static_cast<uint32_t>(regs[s]);
+                addr += imm;
                 
                 if(addr == putcAddress) {
-                    putchar(regs[instr.t]);
+                    putchar(regs[t]);
                 } else {
-                    *static_cast<int32_t*>(mem[addr]) = regs[instr.t];
+                    *reinterpret_cast<int32_t*>(&mem[addr]) = regs[t];
                 }
 
                 pc += isize;
@@ -126,24 +144,25 @@ void run(const Instruction* code, size_t codeSize)
 
             case Instruction::BEQ: {
                 pc += isize;
-                if(regs[instr.s] == regs[instr.t]) {
-                    pc += instr.imm * isize;
+                if(regs[s] == regs[t]) {
+                    pc += imm * isize;
                 }
             } break;
 
             case Instruction::BNE: {
                 pc += isize;
-                if(regs[instr.s] != regs[instr.t]) {
-                    pc += instr.imm * isize;
+                if(regs[s] != regs[t]) {
+                    pc += imm * isize;
                 }
             } break;
 
             case Instruction::JR: {
-                pc = regs[instr.s];
+                pc = regs[s];
             } break;
 
             case Instruction::JALR: {
-                int32_t temp = regs[instr.s];
+				pc += 4;
+                int32_t temp = regs[s];
                 regs[31] = pc;
                 pc = temp;
             } break;

@@ -220,6 +220,7 @@ class Parser
     std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseUnary(table, s);
+		auto pos = lhs->getPos();
         
         while(curTok == '*' || curTok == '/') {
             int op = curTok;
@@ -228,7 +229,7 @@ class Parser
 
             auto rhs = parseFactor(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -237,6 +238,7 @@ class Parser
     std::unique_ptr<AST> parseTerm(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseFactor(table, s);
+		auto pos = lhs->getPos();
 
         while(curTok == '+' || curTok == '-') {
             int op = curTok;
@@ -245,7 +247,7 @@ class Parser
 
             auto rhs = parseTerm(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -254,6 +256,7 @@ class Parser
     std::unique_ptr<AST> parseRelation(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseTerm(table, s);
+		auto pos = lhs->getPos();
 
         // Unlike terms, relations are limited to a single binary expression
         if(curTok == '<' || curTok == '>' || curTok == TOK_EQUALS || curTok == TOK_LTE || curTok == TOK_GTE || curTok == TOK_NOTEQUALS) {
@@ -263,7 +266,7 @@ class Parser
 
             auto rhs = parseTerm(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -272,6 +275,7 @@ class Parser
     std::unique_ptr<AST> parseExpr(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseRelation(table, s);
+		auto pos = lhs->getPos();
 
         while(curTok == TOK_LOGICAL_AND || curTok == TOK_LOGICAL_OR) {
             int op = curTok;
@@ -280,7 +284,7 @@ class Parser
 
             auto rhs = parseRelation(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;

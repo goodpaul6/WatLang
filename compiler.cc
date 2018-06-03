@@ -130,7 +130,7 @@ private:
         
         auto i = 0u;
         for(auto& arg : ast.getArgs()) {
-            int reg = compileTerm(table, *arg, out);
+            int reg = compileTerm(table, *arg, gen);
             
             gen.add(func->args[i].loc, reg, 0);
 
@@ -168,7 +168,7 @@ private:
     }
     
     // Returns the register index into which the term's result is stored
-    int compileTerm(SymbolTable& table, const AST& ast, std::ostream& out)
+    int compileTerm(SymbolTable& table, const AST& ast, Codegen& gen)
     {
         if(ast.getType() == AST::INT || ast.getType() == AST::BOOL) {
             gen.lis(curReg++, static_cast<const IntAST&>(ast).getValue());
@@ -204,7 +204,7 @@ private:
 
             return curReg - 1;
         } else if(ast.getType() == AST::PAREN) {
-            return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
+            return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), gen);
         } else if(ast.getType() == AST::ID) {
             auto idAst = static_cast<const IdAST&>(ast);
             auto var = table.getVar(idAst.getName(), curFunc);
@@ -227,12 +227,12 @@ private:
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<const CallAST&>(ast);
 
-            return compileCall(table, cst, out);
+            return compileCall(table, cst, gen);
         } else if(ast.getType() == AST::STR) {
             gen.lis(curReg++, table.getString(static_cast<const StrAST&>(ast).getId()).loc);
             return curReg - 1;
         } else if(ast.getType() == AST::UNARY) {
-            int reg = compileTerm(table, static_cast<const UnaryAST&>(ast).getRhs(), out);
+            int reg = compileTerm(table, static_cast<const UnaryAST&>(ast).getRhs(), gen);
 
             switch(static_cast<const UnaryAST&>(ast).getOp()) {
                 case '-': {
@@ -246,7 +246,7 @@ private:
                 } break;
             }
         } else if(ast.getType() == AST::CAST) {
-            return compileTerm(table, static_cast<const CastAST&>(ast).getValue(), out);
+            return compileTerm(table, static_cast<const CastAST&>(ast).getValue(), gen);
         }
 
         assert(ast.getType() == AST::BIN);
@@ -255,8 +255,8 @@ private:
 
         int dest = curReg++;
 
-        int a = compileTerm(table, bst.getLhs(), out);
-        int b = compileTerm(table, bst.getRhs(), out);
+        int a = compileTerm(table, bst.getLhs(), gen);
+        int b = compileTerm(table, bst.getRhs(), gen);
 
         switch(bst.getOp()) {
             case '+': gen.add(dest, a, b); break;
@@ -363,7 +363,7 @@ private:
         if(ast.getType() == AST::BIN) {
             auto& bst = static_cast<const BinAST&>(ast);
 
-            int reg = compileTerm(table, bst.getRhs(), out);
+            int reg = compileTerm(table, bst.getRhs(), gen);
 
             auto& lhs = bst.getLhs();
 
@@ -388,7 +388,7 @@ private:
 
                 assert(ust.getOp() == '*');
 
-                int lreg = compileTerm(table, ust.getRhs(), out);
+                int lreg = compileTerm(table, ust.getRhs(), gen);
 
                 gen.sw(reg, 0, lreg);
             }
@@ -397,21 +397,21 @@ private:
             curReg = reg;
         } else if(ast.getType() == AST::BLOCK) {
             for(auto& a : static_cast<const BlockAST&>(ast).getAsts()) {
-                compileStatement(table, *a, out);
+                compileStatement(table, *a, gen);
             }
         } else if(ast.getType() == AST::IF) {
             auto& ist = static_cast<const IfAST&>(ast);
 
             int prevReg = curReg;
 
-            int cond = compileTerm(table, ist.getCond(), out);
+            int cond = compileTerm(table, ist.getCond(), gen);
 
             auto altLabel = uniqueLabel();
             auto endLabel = uniqueLabel();
 
             gen.beq(cond, 0, altLabel);
 
-            compileStatement(table, ist.getBody(), out);
+            compileStatement(table, ist.getBody(), gen);
 
             int temp = curReg++;
 
@@ -422,7 +422,7 @@ private:
 
             gen.labelHere(altLabel);
             if(ist.getAlt()) {
-                compileStatement(table, *ist.getAlt(), out);
+                compileStatement(table, *ist.getAlt(), gen);
             }
 
             gen.labelHere(endLabel);
@@ -435,13 +435,13 @@ private:
 
             gen.labelHere(condLabel);
 
-            int cond = compileTerm(table, ist.getCond(), out);
+            int cond = compileTerm(table, ist.getCond(), gen);
 
             auto endLabel = uniqueLabel();
 
             gen.beq(cond, 0, endLabel);
 
-            compileStatement(table, ist.getBody(), out);
+            compileStatement(table, ist.getBody(), gen);
 
             int temp = curReg++;
 
@@ -473,12 +473,12 @@ private:
             gen.lis(temp, 4);
             gen.sub(30, 30, temp);
 
-            compileStatement(table, fst.getBody(), out);
+            compileStatement(table, fst.getBody(), gen);
 
             // We are free to stop these regs now that the body of the function has been passed
             curReg = prev;
 
-            compileRestoreLinkAndSp(out);
+            compileRestoreLinkAndSp(gen);
 
             gen.jr(31);
 
@@ -487,7 +487,7 @@ private:
             auto& cst = static_cast<const CallAST&>(ast);
 
             // Ignore return value
-            curReg = compileCall(table, cst, out);
+            curReg = compileCall(table, cst, gen);
         } else if(ast.getType() == AST::RETURN) {
             if(!curFunc) {
                 throw PosError{ast.getPos(), "You're trying to return but you're not inside a function. Think about that for a second."};
@@ -496,13 +496,13 @@ private:
             auto value = static_cast<const ReturnAST&>(ast).getValue();
         
             if(value) {
-                int res = compileTerm(table, *value, out);
+                int res = compileTerm(table, *value, gen);
 
                 // Move the result into return value register
                 gen.add(curFunc->firstReg - 1, res, 0);
             }
 
-            compileRestoreLinkAndSp(out);
+            compileRestoreLinkAndSp(gen);
             gen.jr(31);
         } else if(ast.getType() == AST::ASM) {
             gen.parse(ast.getPos(), static_cast<const AsmAST&>(ast).getCode());
