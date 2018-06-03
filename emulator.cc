@@ -1,149 +1,152 @@
 #include <cassert>
 #include <iostream>
 
-void runMips(const uint8_t* prog, size_t progSize)
+struct Instruction
 {
-    const int32_t exitAddress = 0x1234beef;
+    enum Type
+    {
+        LIS, WORD,
+        ADD, SUB, MULT, DIV, SLT,
+        MFHI, MFLO,
+        LW, SW,
+        BEQ, BNE,
+        JR, JALR
+    };
+
+    Type type;
+
+    union
+    {
+        int32_t word;
+        struct 
+        { 
+            uint8_t s, t;
+            union { uint8_t d; int16_t imm; };
+        };
+    };
+};
+
+void run(const Instruction* code, size_t codeSize)
+{
+    const size_t isize = sizeof(Instruction);
+
+    const int32_t exitAddress = -1;
     const int32_t getcAddress = 0xffff0004;
     const int32_t putcAddress = 0xffff000c;
 
     int32_t lo = 0, hi = 0;
-    uint32_t pc = 0;
+    int32_t pc = 0;
     int32_t regs[32] = { 0 };
     
     uint8_t mem[1 << 20];
 
-    assert(progSize < 1 << 20);
-
-    memcpy(mem, prog, progSize);
+    memcpy(mem, code, codeSize);
 
     // Initialize the special registers
     regs[30] = 1 << 20;
     regs[31] = exitAddress;
  
     while(true) {
-        uint32_t instr = static_cast<uint32_t>(mem[pc]);
+        if(pc == exitAddress) {
+            return;
+        }
 
-        auto startBits = (instr >> 26) & 0x3f;
+        auto instr = *static_cast<Instruction*>(&mem[pc]);
 
-        auto sReg = (instr >> 21) & 0x3f;
-        auto tReg = (instr >> 16) & 0x3f;
-        auto dReg = (instr >> 11) & 0x3f;
+        regs[0] = 0;
 
-        auto endBits = instr & 0x7ff;
+        switch(instr.type) {
+            case Instruction::LIS: {
+                pc += isize;
+                regs[instr.d] = static_cast<Instruction*>(&mem[pc])->word;
+                pc += isize;
+            } break;
 
-        auto imm = instr & 0xffff;
+            case Instruction::ADD: {
+                regs[instr.d] = regs[instr.s] + regs[instr.t];
+                pc += isize;
+            } break;
 
-        if(startBits == 0) {
-            // add, sub, mult, div, mfhi, lis, slt, jr, jalr
+            case Instruction::SUB: {
+                regs[instr.d] = regs[instr.s] - regs[instr.t];
+                pc += isize;
+            } break;
 
-            switch(endBits) {
-                case 0x20: {
-                    // add
-                    regs[dReg] = regs[sReg] + regs[tReg];
-                    pc += 4;
-                } break;
+            case Instruction::MULT: {
+                int64_t result = static_cast<int64_t>(regs[instr.s]) * regs[instr.t];
+                lo = static_cast<int32_t>(result);
+                hi = static_cast<int32_t>(result >> 32);
+                pc += isize;
+            } break;
 
-                case 0x22: {
-                    // sub
-                    regs[dReg] = regs[sReg] - regs[tReg];
-                    pc += 4;
-                } break;
+            case Instruction::DIV: {
+                lo = regs[instr.s] / regs[instr.t];
+                hi = regs[instr.s] % regs[instr.t];
+                pc += isize;
+            } break;
 
-                case 0x18: {
-                    // mult
-                    int64_t r = static_cast<int64_t>(regs[sReg]) * static_cast<int64_t>(regs[tReg]);
+            case Instruction::SLT: {
+                regs[instr.d] = regs[instr.s] < regs[instr.t];
+                pc += isize;
+            } break;
 
-                    hi = static_cast<int32_t>(r >> 32);
-                    lo = static_cast<int32_t>(r);
+            case Instruction::MFHI: {
+                regs[instr.d] = hi;
+                pc += isize;
+            } break;
 
-                    pc += 4;
-                } break;
+            case Instruction::MFLO: {
+                regs[instr.d] = lo;
+                pc += isize;
+            } break;
 
-                case 0x1a: {
-                    // div
-                    lo = regs[sReg] / regs[tReg];
-                    hi = regs[sReg] % regs[tReg];
+            case Instruction::LW: {
+                int32_t addr = regs[instr.s] + instr.imm;
+                
+                if(addr == getcAddress) {
+                    regs[instr.t] = getchar();
+                } else {
+                    regs[instr.t] = *static_cast<int32_t*>(mem[addr]);
+                }
 
-                    pc += 4;
-                } break;
+                pc += isize;
+            } break;
 
-                case 0x10: {
-                    // mfhi
-                    regs[dReg] = hi;
+            case Instruction::SW: {
+                int32_t addr = regs[instr.s] + instr.imm;
+                
+                if(addr == putcAddress) {
+                    putchar(regs[instr.t]);
+                } else {
+                    *static_cast<int32_t*>(mem[addr]) = regs[instr.t];
+                }
 
-                    pc += 4;
-                } break;
+                pc += isize;
+            } break;
 
-                case 0x12: {
-                    // mflo
-                    regs[dReg] = lo;
+            case Instruction::BEQ: {
+                pc += isize;
+                if(regs[instr.s] == regs[instr.t]) {
+                    pc += instr.imm * isize;
+                }
+            } break;
 
-                    pc += 4;
-                } break;
+            case Instruction::BNE: {
+                pc += isize;
+                if(regs[instr.s] != regs[instr.t]) {
+                    pc += instr.imm * isize;
+                }
+            } break;
 
-                case 0x14: {
-                    // lis
-                    pc += 4;
+            case Instruction::JR: {
+                pc = regs[instr.s];
+            } break;
 
-                    regs[dReg] = *static_cast<int32_t*>(&mem[pc]);
-
-                    pc += 4;
-                } break;
-
-                case 0x2A: {
-                    // slt
-                    regs[dReg] = regs[sReg] < regs[tReg];
-                    
-                    pc += 4;
-                } break;
-
-                case 0x08: {
-                    // jr
-                    if(regs[sReg] == exitAddress) {
-                        // Done!
-                        return;
-                    }
-
-                    pc = regs[sReg];
-                } break;
-
-                case 0x09: {
-                    int32_t temp = regs[sReg];
-                    regs[31] = pc;
-                    pc = temp;
-                } break;
-            }
-        } else {
-            // lw, sw, beq
-
-            switch(startBits) {
-                case 0x23: {
-                    // lw
-                    int32_t addr = imm + regs[sReg];
-
-                    // TODO(Apaar): Check for unaligned reads
-
-                    if(addr == getcAddress) {
-                        regs[tReg] = getchar();
-                    } else {
-                        regs[tReg] = *static_cast<int32_t*>(&mem[addr]);
-                    }
-                } break;
-
-                case 0x2B: {
-                    // sw
-                    int32_t addr = imm + regs[sReg];
-
-                    // TODO(Apaar): Check for unaligned writes
-
-                    if(addr == putcAddress) {
-                        putchar(regs[tReg]);
-                    } else {
-                        *static_cast<int32_t*>(&mem[addr]) = regs[tReg];
-                    }
-                } break;
-            }
+            case Instruction::JALR: {
+                int32_t temp = regs[instr.s];
+                regs[31] = pc;
+                pc = temp;
+            } break;
         }
     }
 }

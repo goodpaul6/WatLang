@@ -1,6 +1,8 @@
 #include <iostream>
 
 #include "error.cc"
+#include "emulator.cc"
+#include "codegen.cc"
 #include "lexer.cc"
 #include "symbol.cc"
 #include "ast.cc"

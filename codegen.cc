@@ -1,67 +1,196 @@
+#include <sstream>
 #include <vector>
-
-struct Instruction
-{
-    enum Type
-    {
-        LIS, WORD,
-        ADD, SUB, MULT, DIV, SLT,
-        MFHI, MFLO,
-        LW, SW,
-        BEQ, BNE,
-        JR, JALR
-    };
-
-    Type type;
-
-    union
-    {
-        int32_t word;
-        struct 
-        { 
-            int s, t;
-            union { int d; int16_t imm; };
-        };
-    };
-};
+#include <unordered_map>
 
 struct Codegen
 {
+    // Assembles str into instructions
+    void parse(Pos pos, const std::string& str)
+    {
+        std::istringstream s{str};
+
+        std::string temp;
+
+        s >> temp;
+
+        if(temp == ".word") {
+            s >> temp;
+            
+            if(isdigit(temp[0])) {
+                auto value = std::stol(temp, nullptr, 0);
+
+                if(value < -2147483648 || value > 4294967295) {
+                    throw PosError{pos, "Word value out of range: " + std::to_string(value)};
+                }
+
+                word(static_cast<int32_t>(value));
+            } else if(isalpha(temp[0])) {
+                patches.emplace_back(Patch::WORD, code.size(), temp);
+            }
+        } else if(temp[temp.size() - 1] == ':') {
+            labelHere(temp.substr(0, temp.size() - 1));
+        } else if(temp == "lis") {
+            s >> temp;
+            lis(parseReg(pos, temp));
+        } else if(temp == "add" || temp == "sub" || temp == "slt") {
+            auto instr = temp;
+
+            int regs[3];
+
+            for(int i = 0; i < 3; ++i) {
+                if(!(s >> temp)) {
+                    throw PosError{pos, "Expected register"};
+                }
+
+                regs[i] = parseReg(pos, temp);
+            }
+
+            if(instr == "add") add(regs[0], regs[1], regs[2]);
+            else if(instr == "sub") sub(regs[0], regs[1], regs[2]);
+            else if(instr == "slt") slt(regs[0], regs[1], regs[2]);
+        } else if(temp == "mult" || temp == "div") {
+            auto instr = temp;
+            
+            int regs[2];
+
+            for(int i = 0; i < 2; ++i) {
+                if(!(s >> temp)) {
+                    throw PosError{pos, "Expected register"};
+                }
+
+                regs[i] = parseReg(pos, temp);
+            }
+
+            if(instr == "mult") mult(regs[0], regs[1]);
+            else if(instr == "div") div(regs[0], regs[1]);
+        } else if(temp == "beq" || temp == "bne") {
+            auto instr = temp;
+
+            int regs[2];
+
+            for(int i = 0; i < 2; ++i) {
+                if(!(s >> temp)) {
+                    throw PosError{pos, "Expected register"};
+                }
+
+                regs[i] = parseReg(pos, temp);
+            }
+            
+            s >> temp;
+
+            int16_t imm = 0;
+        
+            if(isalpha(temp[0])) {
+                patches.emplace_back(Patch::BRANCH, code.size(), temp);
+            } else {
+                auto off = std::stoi(temp, nullptr, 0);
+
+                if(off < -32768 || off > 32767) {
+                    throw PosError{pos, "Branch offset out of range"};
+                }
+
+                imm = static_cast<int16_t>(off);
+            }
+
+            if(instr == "beq") beq(regs[0], regs[1], off);
+            else if(instr == "bne") bne(regs[0], regs[1], off);
+        } else if(temp == "lw" || temp == "sw") {
+            auto instr = temp;
+
+            s >> temp;
+
+            int t = parseReg(pos, temp); 
+
+            int off;
+
+            s >> off;
+
+            if(off < -32768 || off > 32767) {
+                throw PosError{pos, "Memory offset out of range"};
+            }
+
+            auto imm = static_cast<int16_t>(off);
+
+            char c = 0;
+
+            s >> c;
+
+            if(c != '(') {
+                throw PosError{s, "Expected '(' after offset"};
+            }
+
+            temp.clear();
+
+            while(s >> c && c != ')') {
+                temp += c;
+            }
+
+            s >> c;
+
+            int sr = parseReg(pos, temp);
+
+            if(instr == "lw") lw(t, imm, sr);
+            else if(instr == "sw") sw(t, imm, sr);
+        } else if(temp == "jr" || temp == "jalr") {
+            auto instr = temp;
+
+            s >> temp;
+
+            if(instr == "jr") jr(parseReg(pos, temp));
+            else if(instr == "jalr") jalr(parseReg(pos, temp));
+        }
+    }
+
+    // Get the position in memory of the next instruction
+    int32_t getPos() const
+    {
+        return code.size() * sizeof(Instruction);
+    }
+
     void labelHere(std::string name)
     {
-        for(auto& label : labels) {
-            if(label.first == name) {
-                if(label.second < 0) {
-                    // Fill in the position
-                    label.second = static_cast<int32_t>(code.size());
-                    return;
-                } else {
-                    throw std::runtime_error{"Defined multiple labels with the name " + name};
-                }
-            }
+        if(labels.find(name) != labels.end()) {
+            throw std::runtime_error{"Defined multiple labels with the name " + name};
         }
 
         labels.emplace_back(std::move(name), static_cast<int32_t>(code.size()));
     }
-
-    void loadConst(int reg, int32_t value)
+    
+    void lis(int reg)
     {
         code.emplace_back(rInst(Instruction::LIS, 0, 0, reg));
-        code.emplace_back(word(value));
     }
 
-    void loadLabel(int reg, const std::string& labelName)
+    void word(int32_t value)
     {
-        code.emplace_back(rInst(Instruction::LIS, 0, 0, reg));
-        code.emplace_back(word(getLabel(labelName)));
+        code.emplace_back(wInst(value));
+    }
+    
+    void word(const std::string& labelName)
+    {
+        // This will be patched
+        patches.emplace_back(Patch::WORD, code.size(), labelName);
+        code.emplace_back(wInst(0));
     }
 
-    void add(int s, int t, int d)
+    void lis(int reg, int32_t value)
+    {
+        lis(reg);
+        word(value);
+    }
+
+    void lis(int reg, const std::string& labelName)
+    {
+        lis(reg);
+        word(labelName);
+    }
+
+    void add(int d, int s, int t)
     {
         code.emplace_back(rInst(Instruction::ADD, s, t, d));
     }
 
-    void sub(int s, int t, int d)
+    void sub(int d, int s, int t)
     {
         code.emplace_back(rInst(Instruction::SUB, s, t, d));
     }
@@ -91,14 +220,36 @@ struct Codegen
         code.emplace_back(rInst(Instruction::MFLO, 0, 0, d));
     }
 
-    void lw(int s, int t, int16_t imm)
+    void lw(int t, int16_t imm, int s)
     {
         code.emplace_back(iInst(Instruction::LW, s, t, imm));
     }
 
-    void sw(int s, int t, int16_t imm)
+    void sw(int t, int16_t imm, int s)
     {
         code.emplace_back(iInst(Instruction::SW, s, t, imm));
+    }
+
+    void beq(int s, int t, int16_t imm)
+    {
+        code.emplace_back(iInst(Instruction::BEQ, s, t, imm));
+    }
+
+    void beq(int s, int t, const std::string& labelName)
+    {
+        patches.emplace_back(Patch::BRANCH, code.size(), labelName);
+        code.emplace_back(iInst(Instruction::BEQ, s, t, 0));
+    }
+
+    void bne(int s, int t, int16_t imm)
+    {
+        code.emplace_back(iInst(Instruction::BNE, s, t, imm));
+    }
+
+    void bne(int s, int t, const std::string& labelName)
+    {
+        patches.emplace_back(Patch::BRANCH, code.size(), labelName);
+        code.emplace_back(iInst(Instruction::BNE, s, t, 0));
     }
 
     void jr(int s)
@@ -111,30 +262,64 @@ struct Codegen
         code.emplace_back(rInst(Instruction::JALR, s, 0, 0));
     }
 
-private:
-    using Label = std::pair<std::string, int32_t>;
-
-    std::vector<Label> labels;
-    std::vector<Instruction> code;
-
-    int32_t getLabel(std::string name)
+    std::vector<Instruction> compile() const
     {
-        auto i = 0u;
+        // This just patches all the labels with the correct address
+        auto result = code;
 
-        for(auto& label : labels) {
-            if(label.first == name) {
-                return i;
+        for(auto& patch : patches) {
+            auto found = labels.find(patch.getLabelName());
+
+            if(found == labels.end()) {
+                throw std::runtime_error{"Referenced undefined label " + patch.getLabelName()};
             }
-            ++i;
+
+            switch(patch.getType()) {
+                case Patch::WORD: {
+                    result[patch.getPos()].word = found->second * sizeof(Instruction);
+                } break;
+
+                case Patch::BRANCH: {
+                    auto off = (found->second * sizeof(Instruction) - patch.getPos() * sizeof(Instruction) - sizeof(Instruction)) / sizeof(Instruction);
+                    
+                    if(off < -32768 || off > 32767) {
+                        throw std::runtime_error{"Branch to label " + found->first + " is out of branch offset range"};
+                    }
+                    
+                    result[patch.getPos()].imm = static_cast<int16_t>(off);
+                } break;
+            }
         }
 
-        // We create a label with an undefined position
-        // which will be filled in later
-        labels.emplace_back(std::move(name), -1);
-        return labels.size() - 1;
+        return result;
     }
 
-    Instruction word(int32_t value)
+private:
+    struct Patch
+    {
+        enum Type
+        {
+            WORD,
+            BRANCH
+        };
+
+        Patch(Type type, size_t pos, std::string labelName) : type{type}, pos{pos}, labelName{std::move(labelName)} {}
+
+        Type getType() const { return type; }
+        size_t getPos() const { return pos; }
+        const std::string& getLabelName() const { return labelName; }
+    
+    private:
+        Type type;
+        size_t pos;
+        std::string labelName;
+    };
+    
+    std::unordered_map<std::string, int> labels;
+    std::vector<Instruction> code;
+    std::vector<Patch> patches;
+
+    Instruction wInst(int32_t value)
     {
         Instruction i;
 
@@ -166,5 +351,20 @@ private:
         i.d = d;
 
         return i;
+    }
+
+    int parseReg(const Pos& pos, const std::string& str)
+    {
+        if(str[0] != '$') {
+            throw PosError{"Expected '$' in register operand"};
+        }
+
+        auto reg = std::stoi(str);
+        
+        if(reg < 0 || reg > 31) {
+            throw PosError{"Invalid register: " + str};
+        }
+
+        return reg;
     }
 };
