@@ -38,12 +38,12 @@ private:
 // Used for all of INT, BOOL, CHAR
 struct IntAST : public AST
 {
-    IntAST(Pos pos, int value, Type type) : AST{type, pos}, value{value} {}
+    IntAST(Pos pos, int64_t value, Type type) : AST{type, pos}, value{value} {}
 
-    int getValue() const { return value; }
+    int64_t getValue() const { return value; }
 
 private:
-    int value;
+    int64_t value;
 };
 
 struct StrAST : public AST

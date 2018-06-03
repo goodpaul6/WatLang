@@ -170,8 +170,8 @@ private:
     // Returns the register index into which the term's result is stored
     int compileTerm(SymbolTable& table, const AST& ast, Codegen& gen)
     {
-        if(ast.getType() == AST::INT || ast.getType() == AST::BOOL) {
-            gen.lis(curReg++, static_cast<const IntAST&>(ast).getValue());
+        if(ast.getType() == AST::INT || ast.getType() == AST::BOOL || ast.getType() == AST::CHAR) {
+			gen.lis(curReg++, static_cast<int32_t>(static_cast<const IntAST&>(ast).getValue()));
 
             return curReg - 1;
         } else if(ast.getType() == AST::ARRAY || ast.getType() == AST::ARRAY_STRING) {
@@ -269,6 +269,11 @@ private:
             case '/': {
                 gen.div(a, b);
                 gen.mflo(dest);
+            } break;
+
+            case '%': {
+                gen.div(a, b);
+                gen.mfhi(dest);
             } break;
 
             case TOK_EQUALS: {

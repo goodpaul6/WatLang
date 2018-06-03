@@ -156,7 +156,7 @@ class Parser
             } else {
                 expectToken(TOK_INT, "Expected integer or ']' after '['.");
 
-                length = lexer.getInt();
+                length = static_cast<int>(lexer.getInt());
 
                 curTok = lexer.getToken(s);
 
@@ -178,7 +178,7 @@ class Parser
 
                     expectToken(TOK_INT, "Expected integer in array literal.");
 
-                    values.emplace_back(fac * lexer.getInt());
+                    values.emplace_back(fac * static_cast<int>(lexer.getInt()));
 
                     curTok = lexer.getToken(s);
 
@@ -222,7 +222,7 @@ class Parser
         auto lhs = parseUnary(table, s);
 		auto pos = lhs->getPos();
         
-        while(curTok == '*' || curTok == '/') {
+        while(curTok == '*' || curTok == '/' || curTok == '%') {
             int op = curTok;
 
             curTok = lexer.getToken(s);

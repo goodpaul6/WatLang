@@ -215,7 +215,7 @@ struct Codegen
         code.emplace_back(rInst(Instruction::DIV, s, t, 0));
     }
 
-    void slt(int s, int t, int d)
+    void slt(int d, int s, int t)
     {
         code.emplace_back(rInst(Instruction::SLT, s, t, d));
     }

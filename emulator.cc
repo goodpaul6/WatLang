@@ -37,8 +37,8 @@ void run(const Instruction* code, size_t codeSize)
     const size_t isize = sizeof(Instruction);
 
     const int32_t exitAddress = -1;
-    const int32_t getcAddress = 0xffff0004;
-    const int32_t putcAddress = 0xffff000c;
+    const uint32_t getcAddress = 0xffff0004;
+    const uint32_t putcAddress = 0xffff000c;
 
     int32_t lo = 0, hi = 0;
     int32_t pc = 0;
@@ -161,7 +161,7 @@ void run(const Instruction* code, size_t codeSize)
             } break;
 
             case Instruction::JALR: {
-				pc += 4;
+				pc += isize;
                 int32_t temp = regs[s];
                 regs[31] = pc;
                 pc = temp;

@@ -213,27 +213,26 @@ private:
                 auto lhsType = inferType(table, bst.getLhs());
                 auto rhsType = inferType(table, bst.getRhs());
 
-                if(lhsType->tag == Typetag::PTR) {
-                    if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR) {
+                switch(bst.getOp()) {
+                    case '+': case '-': case '*': case '/': {
+                        if(lhsType->tag == Typetag::PTR) {
+                            if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR) {
                         throw PosError{ast.getPos(), "Attempted to perform binary operation on pointer with a " + static_cast<std::string>(*rhsType)};
-                    }
-
-                    return std::unique_ptr<Typetag>{new Typetag{*lhsType}};
-                }
-
-                if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR || lhsType->tag == Typetag::BOOL) {
-                    if(bst.getOp() == '+' || bst.getOp() == '-' || bst.getOp() == '*' || bst.getOp() == '/') {
-                        if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::PTR && rhsType->tag != Typetag::CHAR) {
-                            throw PosError{ast.getPos(), "Attempted to apply binary operation to " + static_cast<std::string>(*rhsType) + " and an integer."};
+                            }
+                        } else if(lhsType->tag == Typetag::INT || lhsType->tag == Typetag::CHAR) {
+                            if(rhsType->tag != Typetag::INT && rhsType->tag != Typetag::CHAR) {
+                                throw PosError{ast.getPos(), "Attempted to perform binary operation between a " + static_cast<std::string>(*lhsType) + " and a " + static_cast<std::string>(*rhsType)};
+                            }
                         }
 
-                        return rhsType->tag == Typetag::PTR ? 
-                            std::unique_ptr<Typetag>{new Typetag{*rhsType}} : 
-                            std::unique_ptr<Typetag>{new Typetag{*lhsType}};
-                    } else {
-                        // Relational/Logical operators
+                        return std::unique_ptr<Typetag>{new Typetag{*lhsType}};
+                    } break;
+
+                    default:
+                        // Relational operators
+                        // TODO(Apaar): Typecheck these
                         return std::unique_ptr<Typetag>{new Typetag{Typetag::BOOL}};
-                    }
+                        break;
                 }
 
                 throw PosError{ast.getPos(), "Invalid types in binary operation: " + static_cast<std::string>(*lhsType) + " " + static_cast<std::string>(*rhsType)};
