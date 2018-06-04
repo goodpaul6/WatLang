@@ -118,30 +118,3 @@ func strcat(dest : *char, src : *char) : void {
 
     *end = cast(char) 0;
 }
-
-var allocPos : *void;
-
-func initAlloc() : void {
-    var start : *void = cast(*void) 0;
-
-    asm "lis $2";
-    asm ".word memStartXXXX";
-
-    allocPos = start;
-}
-
-func malloc(size : int) : *void {
-    var mem : *void = allocPos;
-    
-    // Prefix with size
-    var pSize : *int = cast(*int) allocPos;
-    
-    *pSize = 4 + size;
-    allocPos = allocPos + 4 + size;
-
-    return mem;
-}
-
-func free(mem : *void) : void {
-    allocPos = allocPos - (*cast(*int) (mem - 4));
-}

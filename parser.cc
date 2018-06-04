@@ -6,7 +6,6 @@
 class Parser
 {
     Lexer lexer;
-    std::unordered_set<std::string> includes;
 
     int curTok = 0;
     Func* curFunc = nullptr;
@@ -515,13 +514,15 @@ class Parser
                 // We've already included this file, so don't bother
                 if(includes.find(lexer.getLexeme()) != includes.end()) {
                     curTok = lexer.getToken(s);
-                    return parseStatement(table, s);
+					return nullptr;
                 }
 
                 auto filename = lexer.getLexeme();
 
                 std::ifstream f{filename};
                 curTok = lexer.getToken(s);
+
+                includes.insert(filename);
 
                 Parser p;
 
@@ -544,6 +545,8 @@ class Parser
     }
 
 public:
+    std::unordered_set<std::string> includes;
+
     std::vector<std::unique_ptr<AST>> parseUntilEof(SymbolTable& table, std::istream& s, const std::string& filename = "")
     {
         lexer = {};
@@ -556,6 +559,10 @@ public:
 
         while(curTok != TOK_EOF) {
             auto ast = parseStatement(table, s);
+			if (!ast) {
+				continue;
+			}
+
             asts.emplace_back(std::move(ast));
         }
 

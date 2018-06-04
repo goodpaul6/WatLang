@@ -37,8 +37,8 @@ void run(const Instruction* code, size_t codeSize)
     const size_t isize = sizeof(Instruction);
 
     const int32_t exitAddress = -1;
-    const uint32_t getcAddress = 0xffff0004;
-    const uint32_t putcAddress = 0xffff000c;
+    const int32_t getcAddress = 0xffff0004;
+    const int32_t putcAddress = 0xffff000c;
 
     int32_t lo = 0, hi = 0;
     int32_t pc = 0;
@@ -117,12 +117,13 @@ void run(const Instruction* code, size_t codeSize)
             } break;
 
             case Instruction::LW: {
-                uint32_t addr = static_cast<uint32_t>(regs[s]);
+				auto addr = regs[s];
                 addr += imm;
                 
                 if(addr == getcAddress) {
                     regs[t] = getchar();
                 } else {
+					assert(addr >= 0);
                     regs[t] = *reinterpret_cast<int32_t*>(&mem[addr]);
                 }
 
@@ -130,12 +131,13 @@ void run(const Instruction* code, size_t codeSize)
             } break;
 
             case Instruction::SW: {
-                uint32_t addr = static_cast<uint32_t>(regs[s]);
+                auto addr = regs[s];
                 addr += imm;
                 
                 if(addr == putcAddress) {
                     putchar(regs[t]);
                 } else {
+					assert(addr >= 0);
                     *reinterpret_cast<int32_t*>(&mem[addr]) = regs[t];
                 }
 

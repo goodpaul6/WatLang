@@ -26,6 +26,8 @@ int main(int argc, char** argv)
 
         Parser parser;
 
+        parser.includes.insert(argv[1]);
+
         auto asts = parser.parseUntilEof(table, file);
 
         Typer typer;

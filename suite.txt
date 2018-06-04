@@ -9,7 +9,6 @@ array.wat
 buildstr.wat
 str.wat
 echo.wat
-malloc.wat
 assert.wat
 logical.wat
 strcmp.wat
