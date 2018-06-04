@@ -10,7 +10,14 @@ def run_suite(wat_exec, suite_file):
             filename = filename.rstrip()
 
             print("========================================")
-            result = "\n".join(check_output([wat_exec, "tests/" + filename]).decode().splitlines())
+            
+            input=None
+            
+            try:
+                input = open("tests/" + filename + ".in").read().encode()
+            except: pass
+
+            result = "\n".join(check_output([wat_exec, "tests/" + filename], input=input).decode().splitlines())
 
             with open("tests/" + filename + ".out", 'r') as ex:
                 expected_output = ex.read().rstrip()
