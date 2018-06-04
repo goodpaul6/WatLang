@@ -6,7 +6,6 @@
 class Parser
 {
     Lexer lexer;
-    std::unordered_set<std::string> includes;
 
     int curTok = 0;
     Func* curFunc = nullptr;
@@ -156,7 +155,7 @@ class Parser
             } else {
                 expectToken(TOK_INT, "Expected integer or ']' after '['.");
 
-                length = lexer.getInt();
+                length = static_cast<int>(lexer.getInt());
 
                 curTok = lexer.getToken(s);
 
@@ -178,7 +177,7 @@ class Parser
 
                     expectToken(TOK_INT, "Expected integer in array literal.");
 
-                    values.emplace_back(fac * lexer.getInt());
+                    values.emplace_back(fac * static_cast<int>(lexer.getInt()));
 
                     curTok = lexer.getToken(s);
 
@@ -220,15 +219,16 @@ class Parser
     std::unique_ptr<AST> parseFactor(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseUnary(table, s);
+		auto pos = lhs->getPos();
         
-        while(curTok == '*' || curTok == '/') {
+        while(curTok == '*' || curTok == '/' || curTok == '%') {
             int op = curTok;
 
             curTok = lexer.getToken(s);
 
             auto rhs = parseFactor(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lexer.getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -237,6 +237,7 @@ class Parser
     std::unique_ptr<AST> parseTerm(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseFactor(table, s);
+		auto pos = lhs->getPos();
 
         while(curTok == '+' || curTok == '-') {
             int op = curTok;
@@ -245,7 +246,7 @@ class Parser
 
             auto rhs = parseTerm(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -254,6 +255,7 @@ class Parser
     std::unique_ptr<AST> parseRelation(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseTerm(table, s);
+		auto pos = lhs->getPos();
 
         // Unlike terms, relations are limited to a single binary expression
         if(curTok == '<' || curTok == '>' || curTok == TOK_EQUALS || curTok == TOK_LTE || curTok == TOK_GTE || curTok == TOK_NOTEQUALS) {
@@ -263,7 +265,7 @@ class Parser
 
             auto rhs = parseTerm(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -272,6 +274,7 @@ class Parser
     std::unique_ptr<AST> parseExpr(SymbolTable& table, std::istream& s)
     {
         auto lhs = parseRelation(table, s);
+		auto pos = lhs->getPos();
 
         while(curTok == TOK_LOGICAL_AND || curTok == TOK_LOGICAL_OR) {
             int op = curTok;
@@ -280,7 +283,7 @@ class Parser
 
             auto rhs = parseRelation(table, s);
 
-            lhs = std::unique_ptr<AST>{new BinAST{lhs->getPos(), std::move(lhs), std::move(rhs), op}};
+            lhs = std::unique_ptr<AST>{new BinAST{pos, std::move(lhs), std::move(rhs), op}};
         }
 
         return lhs;
@@ -563,13 +566,15 @@ class Parser
                 // We've already included this file, so don't bother
                 if(includes.find(lexer.getLexeme()) != includes.end()) {
                     curTok = lexer.getToken(s);
-                    return parseStatement(table, s);
+					return nullptr;
                 }
 
                 auto filename = lexer.getLexeme();
 
                 std::ifstream f{filename};
                 curTok = lexer.getToken(s);
+
+                includes.insert(filename);
 
                 Parser p;
 
@@ -592,6 +597,8 @@ class Parser
     }
 
 public:
+    std::unordered_set<std::string> includes;
+
     std::vector<std::unique_ptr<AST>> parseUntilEof(SymbolTable& table, std::istream& s, const std::string& filename = "")
     {
         lexer = {};
@@ -604,6 +611,10 @@ public:
 
         while(curTok != TOK_EOF) {
             auto ast = parseStatement(table, s);
+			if (!ast) {
+				continue;
+			}
+
             asts.emplace_back(std::move(ast));
         }
 

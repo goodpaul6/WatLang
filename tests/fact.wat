@@ -5,6 +5,6 @@ func fact(n : int) : int {
     return n * fact(n - 1);
 }
 
-func main(a : int, b : int) : void {
-    putn(fact(a));
+func main() : void {
+    putn(fact(5));
 }

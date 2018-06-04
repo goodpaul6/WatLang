@@ -1,5 +1,5 @@
 # WatLang
-A small statically-typed language which compiles to a subset of MIPS.
+A small statically-typed language which compiles to a subset of MIPS (emulator is included).
 
 ## Usage
 On a linux machine, you need only
@@ -10,11 +10,19 @@ make
 ```
 in order to compile the executable.
 
-You can compile source files by doing
+On windows, if you have visual studio, you must define the environment variable `VS_CMD_LINE_BUILD_PATH` to wherever your `vcvarsall.bat` is located. Then, you can
 ```
-./wat < my_file.wat > my_file.asm
+git clone https://github.com/goodpaul6/WatLang
+cd WatLang
+mkdir bin
+build.bat
 ```
-and use a MIPS assembler to assemble `my_file.asm` into a binary.
+
+You can then run code by writing
+
+```
+wat path/to/file.wat
+```
 
 ## Example
 ```

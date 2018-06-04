@@ -1,7 +1,7 @@
 func exit() : void {
     asm "lis $1";
     asm ".word exitAddrGlobalXXXX";
-    asm "lw $31, 0($1)";
+    asm "lw $31 0($1)";
     asm "jr $31";
 }
 
@@ -28,7 +28,7 @@ func getc() : char {
 func putc(c : char) : void {
     asm "lis $3";
     asm ".word 0xffff000c";
-    asm "sw $1, 0($3)";
+    asm "sw $1 0($3)";
 }
 
 func puts(s : *char) : void {
@@ -39,10 +39,10 @@ func puts(s : *char) : void {
     asm ".word 4";
 
     asm "putsLoop:";
-    asm "lw $4, 0($1)";
-    asm "beq $4, $0, putsEnd";
-    asm "sw $4, 0($3)";
-    asm "add $1, $1, $5";
+    asm "lw $4 0($1)";
+    asm "beq $4 $0 putsEnd";
+    asm "sw $4 0($3)";
+    asm "add $1 $1 $5";
     asm "lis $4";
     asm ".word putsLoop";
     asm "jr $4";
@@ -52,89 +52,30 @@ func puts(s : *char) : void {
 }
 
 func putn(n : int) : void {
-    // If the number is 0, we just output that and exit
-    asm "bne $1, $0, putnNonZero";
-    asm "lis $3";
-    asm ".word 48";
-    asm "lis $4";
-    asm ".word 0xffff000c";
-    asm "sw $3, 0($4)";
-    asm "lis $3";
-    asm ".word putnExit";
-    asm "jr $3";
+    if(n == 0) {
+        putc('0');
+        putc(cast(char) 10);
+        return;
+    }
 
-    asm "putnNonZero:";
+    if(n < 0) {
+        *cast(*char) 0xffff000c = '-';
+        n = n * -1;
+    }
 
-    // If the number is < 0, print the sign and negate it
-    asm "slt $3, $1, $0";
-    asm "beq $3, $0, putnPostSign";
-    asm "lis $3";
-    asm ".word 45";
-    asm "lis $4";
-    asm ".word 0xffff000c";
-    asm "sw $3, 0($4)";
-    asm "sub $1, $0, $1";
+    var buf : *char = [30]"";
+    var bufStart : *char = buf;
 
-    asm "putnPostSign:";
+    while(n > 0) {
+        *buf = '0' + cast(char)(n % 10);
+        buf = buf + 4;
+        n = n / 10;
+    }
 
-    // Make room on the stack for 20 digits (4 * 20 = 80 bytes)
-    asm "lis $3";
-    asm ".word 80";
-    asm "sub $30, $30, $3";
-    
-    // We store the digit pointer in $4
-    asm "add $4, $30, $0";
-
-    // $5 is 10 for the first loop
-    asm "lis $5";
-    asm ".word 10";
-
-    asm "putnstart:";
-    asm "beq $1, $0, putnprint";
-    asm "div $1, $5";
-
-    // Put the result of the modulo into digit memory and move the pointer
-    asm "mfhi $6";
-    asm "mflo $1";
-    asm "sw $6, 0($4)";
-    asm "lis $6";
-
-    asm ".word 4";
-    asm "add $4, $4, $6";
-
-    asm "lis $6";
-    asm ".word putnstart";
-    asm "jr $6";
-    
-    asm "putnprint:";
-
-    asm "lis $5";
-    asm ".word 0xffff000c";
-
-    asm "putnprintloop:";
-
-    asm "beq $4, $30, putnEnd";
-    asm "lw $6, -4($4)";
-    asm "lis $7";
-    asm ".word 48";
-    asm "add $6, $6, $7";
-    asm "sw $6, 0($5)";
-
-    asm "lis $6";
-    asm ".word 4";
-    asm "sub $4, $4, $6";
-
-    asm "lis $6";
-    asm ".word putnprintloop";
-    asm "jr $6";
-
-    asm "putnEnd:";
-
-    asm "lis $3";
-    asm ".word 80";
-    asm "add $30, $30, $3";
-
-    asm "putnExit:";
+    while(buf != bufStart) {
+        *cast(*char) 0xffff000c = *(buf - 4);
+        buf = buf - 4;
+    }
 
     putc(cast(char) 10);
 }
@@ -176,31 +117,4 @@ func strcat(dest : *char, src : *char) : void {
     }
 
     *end = cast(char) 0;
-}
-
-var allocPos : *void;
-
-func initAlloc() : void {
-    var start : *void = cast(*void) 0;
-
-    asm "lis $2";
-    asm ".word memStartXXXX";
-
-    allocPos = start;
-}
-
-func malloc(size : int) : *void {
-    var mem : *void = allocPos;
-    
-    // Prefix with size
-    var pSize : *int = cast(*int) allocPos;
-    
-    *pSize = 4 + size;
-    allocPos = allocPos + 4 + size;
-
-    return mem;
-}
-
-func free(mem : *void) : void {
-    allocPos = allocPos - (*cast(*int) (mem - 4));
 }

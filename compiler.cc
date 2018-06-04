@@ -5,7 +5,7 @@
 
 struct Compiler
 {
-    void compile(SymbolTable& table, const std::vector<std::unique_ptr<AST>>& asts, std::ostream& out)
+    void compile(SymbolTable& table, const std::vector<std::unique_ptr<AST>>& asts, Codegen& gen)
     {
         if(!table.getFunc("main")) {
             throw std::runtime_error{"Missing main function."};
@@ -18,17 +18,15 @@ struct Compiler
             }
         }
 
-        resolveSymbolLocations(table, out);
-
-        out << "; code\n";
+        resolveSymbolLocations(table, gen);
 
         for(auto& ast : asts) {
-            compileStatement(table, *ast, out);
+            compileStatement(table, *ast, gen);
         }
 
         // This is used by the default allocator in the runtime
         // to determine where it can start allocating memory
-        out << "memStartXXXX:\n";
+        gen.labelHere("memStartXXXX");
     }
 
 private:
@@ -49,44 +47,32 @@ private:
     }
 
     // Makes room for symbols and sets their location values
-    void resolveSymbolLocations(SymbolTable& table, std::ostream& out)
+    void resolveSymbolLocations(SymbolTable& table, Codegen& gen)
     {
         // We keep track of return-to-os address
-        out << "lis $29\n";
-        out << ".word exitAddrGlobalXXXX\n";
-        out << "sw $31, 0($29)\n";
+        gen.lis(29, "exitAddrGlobalXXXX");
+        gen.sw(31, 0, 29);
 
-        out << "lis $29\n";
-        out << ".word main\n";
-        out << "jr $29\n";
-
-        out << "; globals\n";
-
-        auto i = 24u;
+        gen.lis(29, "main");
+        gen.jr(29);
 
         for(auto& v : table.globals) {
-            out << ".word 0\n";
-
-            v.loc = i;
-            i += 4;
+            v.loc = gen.getPos();
+            gen.word(0);
         }
 
-        out << "; strings\n";
-
         for(auto& s : table.strings) {
-            s.loc = i;
+            s.loc = gen.getPos();
             for(auto ch : s.str) {
-                out << ".word " << (int)ch << "\n";
-                i += 4;
+                gen.word(ch);
             }
 
             // null-terminator
-            out << ".word 0\n";
-            i += 4;
+            gen.word(0);
         }
-
-        out << "exitAddrGlobalXXXX: .word 0\n";
-        i += 4;
+     
+        gen.labelHere("exitAddrGlobalXXXX");
+        gen.word(0);
 
         for(auto& f : table.funcs) {
             auto reg = 1;
@@ -112,7 +98,7 @@ private:
         }
     }
 
-    int compileCall(SymbolTable& table, const CallAST& ast, std::ostream& out)
+    int compileCall(SymbolTable& table, const CallAST& ast, Codegen& gen)
     {
         auto func = table.getFunc(ast.getFuncName());
 
@@ -129,7 +115,7 @@ private:
         // Store all the registers in use so far
         for(int i = 1; i < curReg; ++i) {
             spaceUsed += 4;
-            out << "sw $" << i << ", -" << spaceUsed << "($30)\n";
+            gen.sw(i, -spaceUsed, 30);
         }
  
         int prev = curReg;
@@ -142,9 +128,8 @@ private:
 
         int temp = curReg++;
 
-        out << "lis $" << temp << "\n";
-        out << ".word " << spaceUsed << "\n";
-        out << "sub $30, $30, $" << temp << "\n";
+        gen.lis(temp, spaceUsed);
+        gen.sub(30, 30, temp);
 
         curReg = temp;
 
@@ -152,9 +137,9 @@ private:
         
         auto i = 0u;
         for(auto& arg : ast.getArgs()) {
-            int reg = compileTerm(table, *arg, out);
+            int reg = compileTerm(table, *arg, gen);
             
-            out << "add $" << func->args[i].loc << ", $" << reg << ", $0\n";
+            gen.add(func->args[i].loc, reg, 0);
 
             // We are free to stomp that register now
             curReg = reg;
@@ -164,27 +149,25 @@ private:
         // Jump into the function  
         temp = std::max(func->firstReg, curFunc ? curFunc->firstReg : 0);
 
-        out << "lis $" << temp << "\n";
-        out << ".word " << func->name << "\n";
-        out << "jalr $" << temp << "\n";
+        gen.lis(temp, func->name);
+        gen.jalr(temp);
 
         curReg = prev;
 
         // Move return value (could be garbage if there is none) into temp reg
-        out << "add $" << curReg++ << ", $" << (func->firstReg - 1) << ", $0\n";
+        gen.add(curReg++, func->firstReg - 1, 0);
 
         temp = curReg++;
 
         // Restore regs
-        out << "lis $" << temp << "\n";
-        out << ".word " << spaceUsed << "\n";
-        out << "add $30, $30, $" << temp << "\n";
+        gen.lis(temp, spaceUsed);
+        gen.add(30, 30, temp);
 
         curReg = temp;
 
         // -2 because we used an extra register to store the return value (but we didn't save that register)
         for(int i = curReg - 2; i >= 1; --i) {
-            out << "lw $" << i << ", -" << spaceUsed << "($30)\n";
+            gen.lw(i, -spaceUsed, 30);
             spaceUsed -= 4;
         }
 
@@ -192,22 +175,20 @@ private:
     }
     
     // Returns the register index into which the term's result is stored
-    int compileTerm(SymbolTable& table, const AST& ast, std::ostream& out)
+    int compileTerm(SymbolTable& table, const AST& ast, Codegen& gen)
     {
-        if(ast.getType() == AST::INT || ast.getType() == AST::BOOL) {
-            out << "lis $" << curReg++ << "\n";
-            out << ".word " << static_cast<const IntAST&>(ast).getValue() << "\n";
+        if(ast.getType() == AST::INT || ast.getType() == AST::BOOL || ast.getType() == AST::CHAR) {
+			gen.lis(curReg++, static_cast<int32_t>(static_cast<const IntAST&>(ast).getValue()));
 
             return curReg - 1;
         } else if(ast.getType() == AST::ARRAY || ast.getType() == AST::ARRAY_STRING) {
             auto startLabel = uniqueLabel();
             auto endLabel = uniqueLabel();
 
-            out << "lis $" << curReg++ << "\n";
-            out << ".word " << endLabel << "\n";
-            out << "jr $" << curReg - 1 << "\n";
+            gen.lis(curReg++, endLabel);
+            gen.jr(curReg - 1);
 
-            out << startLabel << ":\n";
+            gen.labelHere(startLabel);
             
             auto& a = static_cast<const ArrayAST&>(ast);
     
@@ -217,25 +198,22 @@ private:
 
             auto i = 0;
             for(auto value : a.getValues()) {
-                out << ".word " << value << "\n";
+                gen.word(value);
                 ++i;
             }
 
             for(auto j = i; j < a.getLength(); ++j) {
-                out << ".word 0\n";
+                gen.word(0);
             }
 
-            out << endLabel << ":\n";
+            gen.labelHere(endLabel);
+            gen.lis(curReg - 1, startLabel);
 
-            out << "lis $" << curReg - 1 << "\n";
-            out << ".word " << startLabel << "\n";
-            
             return curReg - 1;
         } else if(ast.getType() == AST::PAREN) {
-            return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), out);
+            return compileTerm(table, static_cast<const ParenAST&>(ast).getInner(), gen);
         } else if(ast.getType() == AST::ID) {
             auto idAst = static_cast<const IdAST&>(ast);
-
             auto var = table.getVar(idAst.getName(), curFunc);
             
             if(!var) {
@@ -247,38 +225,35 @@ private:
                 // return var->loc;
 
                 // We move it into a temp reg we know works and then use that
-                out << "add $" << curReg++ << ", $" << var->loc << ", $0\n";
+                gen.add(curReg++, var->loc, 0);
                 return curReg - 1;
             } else {
-                out << "lw $" << curReg++ << ", " << var->loc << "($0)\n";
-            
+                gen.lw(curReg++, var->loc, 0); 
                 return curReg - 1;
             }
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<const CallAST&>(ast);
 
-            return compileCall(table, cst, out);
+            return compileCall(table, cst, gen);
         } else if(ast.getType() == AST::STR) {
-            out << "lis $" << curReg++ << "\n";
-            out << ".word " << table.getString(static_cast<const StrAST&>(ast).getId()).loc << "\n";
-
+            gen.lis(curReg++, table.getString(static_cast<const StrAST&>(ast).getId()).loc);
             return curReg - 1;
         } else if(ast.getType() == AST::UNARY) {
-            int reg = compileTerm(table, static_cast<const UnaryAST&>(ast).getRhs(), out);
+            int reg = compileTerm(table, static_cast<const UnaryAST&>(ast).getRhs(), gen);
 
             switch(static_cast<const UnaryAST&>(ast).getOp()) {
                 case '-': {
-                    out << "sub $" << curReg++ << ", $0, $" << reg << "\n";
+                    gen.sub(curReg++, 0, reg);
                     return curReg - 1;
                 } break;
 
                 case '*': {
-                    out << "lw $" << curReg++ << ", 0($" << reg << ")\n";
+                    gen.lw(curReg++, 0, reg);
                     return curReg - 1;
                 } break;
             }
         } else if(ast.getType() == AST::CAST) {
-            return compileTerm(table, static_cast<const CastAST&>(ast).getValue(), out);
+            return compileTerm(table, static_cast<const CastAST&>(ast).getValue(), gen);
         }
 
         assert(ast.getType() == AST::BIN);
@@ -287,98 +262,95 @@ private:
 
         int dest = curReg++;
 
-        int a = compileTerm(table, bst.getLhs(), out);
-        int b = compileTerm(table, bst.getRhs(), out);
+        int a = compileTerm(table, bst.getLhs(), gen);
+        int b = compileTerm(table, bst.getRhs(), gen);
 
         switch(bst.getOp()) {
-            case '+': out << "add $" << dest << ", $" << a << ", $" << b << "\n"; break;
-            case '-': out << "sub $" << dest << ", $" << a << ", $" << b << "\n"; break;
+            case '+': gen.add(dest, a, b); break;
+            case '-': gen.sub(dest, a, b); break;
             case '*': {
-                out << "mult $" << a << ", $" << b << "\n";
-                out << "mflo $" << dest << "\n";
+                gen.mult(a, b);
+                gen.mflo(dest);
             } break;
 
             case '/': {
-                out << "div $" << a << ", $" << b << "\n";
-                out << "mflo $" << dest << "\n";
+                gen.div(a, b);
+                gen.mflo(dest);
+            } break;
+
+            case '%': {
+                gen.div(a, b);
+                gen.mfhi(dest);
             } break;
 
             case TOK_EQUALS: {
-                out << "lis $" << dest << "\n";
-                out << ".word 1\n";
+                gen.lis(dest, 1);
 
                 // Set the result to 0 if they're not equal
-                out << "beq $" << a << ", $" << b << ", 1\n";
-                out << "add $" << dest << ", $0, $0\n";
+                gen.beq(a, b, 1);
+                gen.add(dest, 0, 0);
             } break;
 
             case TOK_NOTEQUALS: {
-                out << "lis $" << dest << "\n";
-                out << ".word 1\n";
+                gen.lis(dest, 1);
 
                 // Set the result to 0 if they're equal
-                out << "bne $" << a << ", $" << b << ", 1\n";
-                out << "add $" << dest << ", $0, $0\n";
+                gen.bne(a, b, 1);
+                gen.add(dest, 0, 0);
             } break;
 
             case '<': {
-                out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
+                gen.slt(dest, a, b);
             } break;
 
             case '>': {
-                out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
+                gen.slt(dest, a, b);
 
                 int temp = curReg++;
-                out << "lis $" << temp << "\n";
-                out << ".word 1\n";
+                gen.lis(temp, 1);
 
-                out << "sub $" << dest << ", $" << temp << ", $" << dest << "\n";
+                gen.sub(dest, temp, dest);
 
                 // dest reg=1 if greater than or equal to b
 
                 // we skip setting the dest to 0 if they're not equal
-                out << "bne $" << a << ", $" << b << ", 1\n";
-                out << "add $" << dest << ", $0, $0\n";
+                gen.bne(a, b, 1);
+                gen.add(dest, 0, 0);
             } break;
 
             case TOK_LTE: {
-                out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
+                gen.slt(dest, a, b);
 
                 // Set to 1 if they're equal
-                out << "bne $" << a << ", $" << b << ", 2\n";
-                out << "lis $" << dest << "\n";
-                out << ".word 1\n";
+                gen.bne(a, b, 2);
+                gen.lis(dest, 1);
             } break;
 
             case TOK_GTE: {
-                out << "slt $" << dest << ", $" << a << ", $" << b << "\n";
+                gen.slt(dest, a, b);
 
                 int temp = curReg++;
-                out << "lis $" << temp << "\n";
-                out << ".word 1\n";
+                gen.lis(temp, 1);
 
-                out << "sub $" << dest << ", $" << temp << ", $" << dest << "\n";
+                gen.sub(dest, temp, dest);
 
                 // dest reg=1 if greater than or equal to b
-                // or if a && b
             } break;
 
             case TOK_LOGICAL_AND: {
-                out << "lis $" << dest << "\n";
-                out << ".word 0\n";
-                out << "beq $" << a << ", $0, 3\n";
-                out << "beq $" << b << ", $0, 2\n";
-                out << "lis $" << dest << "\n";
-                out << ".word 1\n";
+                gen.lis(dest, 0);
+
+                gen.beq(a, 0, 3);
+                gen.beq(b, 0, 2);
+                gen.lis(dest, 1);
             } break;
 
             case TOK_LOGICAL_OR: {
-                out << "lis $" << dest << "\n";
-                out << ".word 1\n";
-                out << "bne $" << a << ", $0, 3\n";
-                out << "bne $" << b << ", $0, 2\n";
-                out << "lis $" << dest << "\n";
-                out << ".word 0\n";
+                gen.lis(dest, 1);
+
+                gen.bne(a, 0, 3);
+                gen.bne(b, 0, 2);
+                gen.lis(dest, 0);
             } break;
         }
 
@@ -387,24 +359,23 @@ private:
         return dest;
     }
 
-    void compileRestoreLinkAndSp(std::ostream& out)
+    void compileRestoreLinkAndSp(Codegen& gen)
     {
         int temp = curReg++;
 
-        out << "lis $" << temp << "\n";
-        out << ".word 4\n";
-        out << "add $30, $30, $" << temp << "\n";
-        out << "lw $31, -4($30)\n";
+        gen.lis(temp, 4);
+        gen.add(30, 30, temp);
+        gen.lw(31, -4, 30);
 
         curReg = temp;
     }
 
-    void compileStatement(SymbolTable& table, const AST& ast, std::ostream& out)
+    void compileStatement(SymbolTable& table, const AST& ast, Codegen& gen)
     {
         if(ast.getType() == AST::BIN) {
             auto& bst = static_cast<const BinAST&>(ast);
 
-            int reg = compileTerm(table, bst.getRhs(), out);
+            int reg = compileTerm(table, bst.getRhs(), gen);
 
             auto& lhs = bst.getLhs();
 
@@ -418,10 +389,9 @@ private:
                 }
 
                 if(!var->func) {
-                    out << "; storing into " << var->name << "\n";
-                    out << "sw $" << reg << ", " << var->loc << "($0)\n"; 
+                    gen.sw(reg, var->loc, 0);
                 } else {
-                    out << "add $" << var->loc << ", $" << reg << ", $0\n";
+                    gen.add(var->loc, reg, 0);
                 }
             } else {
                 assert(lhs.getType() == AST::UNARY);
@@ -430,45 +400,44 @@ private:
 
                 assert(ust.getOp() == '*');
 
-                int lreg = compileTerm(table, ust.getRhs(), out);
+                int lreg = compileTerm(table, ust.getRhs(), gen);
 
-                out << "sw $" << reg << ", 0($" << lreg << ")\n";
+                gen.sw(reg, 0, lreg);
             }
 
             // We're done with this register now that it's stored
             curReg = reg;
         } else if(ast.getType() == AST::BLOCK) {
             for(auto& a : static_cast<const BlockAST&>(ast).getAsts()) {
-                compileStatement(table, *a, out);
+                compileStatement(table, *a, gen);
             }
         } else if(ast.getType() == AST::IF) {
             auto& ist = static_cast<const IfAST&>(ast);
 
             int prevReg = curReg;
 
-            int cond = compileTerm(table, ist.getCond(), out);
+            int cond = compileTerm(table, ist.getCond(), gen);
 
             auto altLabel = uniqueLabel();
             auto endLabel = uniqueLabel();
 
-            out << "beq $" << cond << ", $0, " << altLabel << "\n";
+            gen.beq(cond, 0, altLabel);
 
-            compileStatement(table, ist.getBody(), out);
+            compileStatement(table, ist.getBody(), gen);
 
             int temp = curReg++;
 
-            out << "lis $" << temp << "\n";
-            out << ".word " << endLabel << "\n";
-            out << "jr $" << temp << "\n";
+            gen.lis(temp, endLabel);
+            gen.jr(temp);
 
             curReg = prevReg;
 
-            out << altLabel << ":\n";
+            gen.labelHere(altLabel);
             if(ist.getAlt()) {
-                compileStatement(table, *ist.getAlt(), out);
+                compileStatement(table, *ist.getAlt(), gen);
             }
 
-            out << endLabel << ":\n";
+            gen.labelHere(endLabel);
         } else if(ast.getType() == AST::WHILE) {
             auto& ist = static_cast<const WhileAST&>(ast);
 
@@ -476,25 +445,24 @@ private:
 
             auto condLabel = uniqueLabel();
 
-            out << condLabel << ":\n";
+            gen.labelHere(condLabel);
 
-            int cond = compileTerm(table, ist.getCond(), out);
+            int cond = compileTerm(table, ist.getCond(), gen);
 
             auto endLabel = uniqueLabel();
 
-            out << "beq $" << cond << ", $0, " << endLabel << "\n";
+            gen.beq(cond, 0, endLabel);
 
-            compileStatement(table, ist.getBody(), out);
+            compileStatement(table, ist.getBody(), gen);
 
             int temp = curReg++;
 
-            out << "lis $" << temp << "\n";
-            out << ".word " << condLabel << "\n";
-            out << "jr $" << temp << "\n";
+            gen.lis(temp, condLabel);
+            gen.jr(temp);
 
             curReg = prevReg;
 
-            out << endLabel << ":\n";
+            gen.labelHere(endLabel);
         } else if(ast.getType() == AST::FUNC) {
             auto& fst = static_cast<const FuncAST&>(ast);
         
@@ -504,16 +472,7 @@ private:
 
             int temp = curReg++;
 
-            // Some info for debugging asm
-            for(auto& arg : curFunc->args) {
-                out << "; $" << arg.loc << " = " << arg.name << "\n";
-            }
-
-            for(auto& local : curFunc->locals) {
-                out << "; $" << local.loc << " = " << local.name << "\n";
-            }
-
-            out << curFunc->name << ":\n";
+            gen.labelHere(curFunc->name);
 
             // We can only use registers from firstReg onwards
             int prev = curReg;
@@ -522,25 +481,25 @@ private:
 
             temp = curReg++;
 
-            out << "sw $31, -4($30)\n";
-            out << "lis $" << temp << "\n";
-            out << ".word 4\n";
-            out << "sub $30, $30, $" << temp << "\n";
+            gen.sw(31, -4, 30);
+            gen.lis(temp, 4);
+            gen.sub(30, 30, temp);
 
-            compileStatement(table, fst.getBody(), out);
+            compileStatement(table, fst.getBody(), gen);
 
             // We are free to stop these regs now that the body of the function has been passed
             curReg = prev;
 
-            compileRestoreLinkAndSp(out);
-            out << "jr $31\n";
+            compileRestoreLinkAndSp(gen);
+
+            gen.jr(31);
 
             curFunc = nullptr;
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<const CallAST&>(ast);
 
             // Ignore return value
-            curReg = compileCall(table, cst, out);
+            curReg = compileCall(table, cst, gen);
         } else if(ast.getType() == AST::RETURN) {
             if(!curFunc) {
                 throw PosError{ast.getPos(), "You're trying to return but you're not inside a function. Think about that for a second."};
@@ -549,16 +508,16 @@ private:
             auto value = static_cast<const ReturnAST&>(ast).getValue();
         
             if(value) {
-                int res = compileTerm(table, *value, out);
+                int res = compileTerm(table, *value, gen);
 
                 // Move the result into return value register
-                out << "add $" << (curFunc->firstReg - 1) << ", $" << res << ", $0\n";
+                gen.add(curFunc->firstReg - 1, res, 0);
             }
 
-            compileRestoreLinkAndSp(out);
-            out << "jr $31\n";
+            compileRestoreLinkAndSp(gen);
+            gen.jr(31);
         } else if(ast.getType() == AST::ASM) {
-            out << static_cast<const AsmAST&>(ast).getCode() << "\n";
+            gen.parse(ast.getPos(), static_cast<const AsmAST&>(ast).getCode());
         } else {
             throw PosError{ast.getPos(), "Expected statement."};
         }

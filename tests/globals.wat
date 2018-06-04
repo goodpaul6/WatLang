@@ -15,8 +15,9 @@ func addXY() : int {
     return x + y;
 }
 
-func main(a : int, b : int) : void {
-    setX(a);
-    setY(b);
+func main() : void {
+    setX(10);
+    setY(-30);
+
     putn(addXY());
 }

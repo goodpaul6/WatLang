@@ -86,7 +86,7 @@ struct Lexer
                 last = s.get();
             }
 
-            intVal = std::strtol(lexeme.c_str(), nullptr, 0); 
+            intVal = static_cast<int64_t>(std::strtoll(lexeme.c_str(), nullptr, 0));
 
             return TOK_INT;
         }
@@ -184,12 +184,12 @@ struct Lexer
     }
 
     const std::string& getLexeme() const { return lexeme; }
-    int getInt() const { return intVal; }
+    int64_t getInt() const { return intVal; }
 
 private:
     int last = ' ';
     Pos pos{1};
 
     std::string lexeme;
-    int intVal;
+    int64_t intVal;
 };
