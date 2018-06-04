@@ -30,9 +30,14 @@ struct AST
     Pos getPos() const { return pos; }
     Type getType() const { return type; }
 
+    const Typetag* getTag() const { return tag; }
+
 private:
+    friend struct Typer;
+
     Type type;
     Pos pos;
+    const Typetag* tag = nullptr;
 };
 
 // Used for all of INT, BOOL, CHAR
@@ -71,8 +76,8 @@ struct BinAST : public AST
 {
     BinAST(Pos pos, std::unique_ptr<AST> lhs, std::unique_ptr<AST> rhs, int op) : AST{BIN, pos}, lhs{std::move(lhs)}, rhs{std::move(rhs)}, op{op} {}
 
-    const AST& getLhs() const { return *lhs; }
-    const AST& getRhs() const { return *rhs; }
+    AST& getLhs() { return *lhs; }
+    AST& getRhs() { return *rhs; }
     int getOp() const { return op; }
 
 private:
@@ -84,7 +89,7 @@ struct BlockAST : public AST
 {
     BlockAST(Pos pos, std::vector<std::unique_ptr<AST>> asts) : AST{BLOCK, pos}, asts{std::move(asts)} {}
 
-    const std::vector<std::unique_ptr<AST>>& getAsts() const { return asts; }
+    std::vector<std::unique_ptr<AST>>& getAsts() { return asts; }
 
 private:
     std::vector<std::unique_ptr<AST>> asts;
@@ -94,9 +99,9 @@ struct IfAST : public AST
 {
     IfAST(Pos pos, std::unique_ptr<AST> cond, std::unique_ptr<AST> body, std::unique_ptr<AST> alt) : AST{IF, pos}, cond{std::move(cond)}, body{std::move(body)}, alt{std::move(alt)} {}
 
-    const AST& getCond() const { return *cond; }
-    const AST& getBody() const { return *body; }
-    const AST* getAlt() const { return alt.get(); }
+    AST& getCond() { return *cond; }
+    AST& getBody() { return *body; }
+    AST* getAlt() { return alt.get(); }
 
 private:
     std::unique_ptr<AST> cond, body, alt;
@@ -106,8 +111,8 @@ struct WhileAST : public AST
 {
     WhileAST(Pos pos, std::unique_ptr<AST> cond, std::unique_ptr<AST> body) : AST{WHILE, pos}, cond{std::move(cond)}, body{std::move(body)} {}
 
-    const AST& getCond() const { return *cond; }
-    const AST& getBody() const { return *body; }
+    AST& getCond() { return *cond; }
+    AST& getBody() { return *body; }
 
 private:
     std::unique_ptr<AST> cond, body;
@@ -118,7 +123,7 @@ struct FuncAST : public AST
     FuncAST(Pos pos, std::string name, std::unique_ptr<AST> body) : AST{FUNC, pos}, name{std::move(name)}, body{std::move(body)} {}
 
     const std::string& getName() const { return name; }
-    const AST& getBody() const { return *body; }
+    AST& getBody() { return *body; }
 
 private:
     std::string name;
@@ -130,7 +135,7 @@ struct CallAST : public AST
     CallAST(Pos pos, std::string funcName, std::vector<std::unique_ptr<AST>> args): AST{CALL, pos}, funcName{std::move(funcName)}, args{std::move(args)} {}
 
     const std::string& getFuncName() const { return funcName; }
-    const std::vector<std::unique_ptr<AST>>& getArgs() const { return args; }
+    std::vector<std::unique_ptr<AST>>& getArgs() { return args; }
 
 private:
     std::string funcName;
@@ -141,7 +146,7 @@ struct ReturnAST : public AST
 {
     ReturnAST(Pos pos, std::unique_ptr<AST> value) : AST{RETURN, pos}, value{std::move(value)} {}
 
-    const AST* getValue() const { return value.get(); }
+    AST* getValue() { return value.get(); }
 
 private:
     std::unique_ptr<AST> value;
@@ -160,7 +165,7 @@ struct UnaryAST : public AST
 {
     UnaryAST(Pos pos, std::unique_ptr<AST> rhs, int op) : AST{UNARY, pos}, rhs{std::move(rhs)}, op{op} {}
 
-    const AST& getRhs() const { return *rhs; }
+    AST& getRhs() { return *rhs; }
     int getOp() const { return op; }
 
 private:
@@ -172,7 +177,7 @@ struct ParenAST : public AST
 {
     ParenAST(Pos pos, std::unique_ptr<AST> inner) : AST{PAREN, pos}, inner{std::move(inner)} {}
 
-    const AST& getInner() const { return *inner; }
+    AST& getInner() { return *inner; }
 
 private:
     std::unique_ptr<AST> inner;
@@ -183,7 +188,7 @@ struct CastAST : public AST
     CastAST(Pos pos, std::unique_ptr<AST> value, const Typetag* targetType) : AST{CAST, pos}, value{std::move(value)}, targetType{targetType} {}
 
     const Typetag* getTargetType() const { return targetType; }
-    const AST& getValue() const { return *value; }
+    AST& getValue() { return *value; }
 
 private:
     std::unique_ptr<AST> value;

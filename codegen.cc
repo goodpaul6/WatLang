@@ -154,7 +154,7 @@ struct Codegen
     // Get the position in memory of the next instruction
     int32_t getPos() const
     {
-        return code.size() * sizeof(Instruction);
+        return static_cast<int32_t>(code.size() * sizeof(Instruction));
     }
 
     void labelHere(std::string name)

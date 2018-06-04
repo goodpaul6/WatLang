@@ -33,7 +33,7 @@ int main(int argc, char** argv)
         Typer typer;
 
         for(auto& a : asts) {
-            typer.checkTypes(table, *a);
+            typer.resolveTypes(table, *a);
         }
 
         Codegen gen;

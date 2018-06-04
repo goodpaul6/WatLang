@@ -135,7 +135,7 @@ struct SymbolTable
         }
 
         strings.emplace_back(CString{std::move(str), -1});
-        return strings.size() - 1;
+        return static_cast<int>(strings.size() - 1);
     }
 
     const CString& getString(int id)
