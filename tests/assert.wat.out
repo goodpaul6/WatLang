@@ -1,6 +1,6 @@
 ASSERTION FAILED:
 File:
-
+tests/assert.wat
 Line:
 4
 Message:

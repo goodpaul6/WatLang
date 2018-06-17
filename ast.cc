@@ -212,7 +212,8 @@ private:
 
 struct StructConstructorAST : public AST
 {
-    using Initializers = std::vector<std::pair<std::string, std::unique_ptr<AST>>>; 
+    using Initializers = std::vector<std::unique_ptr<AST>>; 
+
     StructConstructorAST(Pos pos, Initializers inits, const Typetag* structTag) : AST{STRUCT_CONSTRUCTOR, pos}, inits{std::move(inits)} {}
 
     Initializers& getInits() { return inits; }

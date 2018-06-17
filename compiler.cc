@@ -154,10 +154,7 @@ private:
 
         int temp = curReg++;
 
-        // TODO(Apaar): If the return value is 4 bytes wide, just store it in the retval
-        // register; don't bother allocating stack space
-
-        if(hasReturn) {
+        if(hasReturn && func->returnType->getSizeInBytes() > 4) {
             // Make room for the return value
             gen.lis(temp, func->returnType->getSizeInBytes());
             gen.sub(STACK_REG, STACK_REG, temp);
@@ -204,10 +201,21 @@ private:
         gen.lis(temp, func->name);
         gen.jalr(temp);
 
-        // If it returned anything, the pointer to it is in RETVAL_REG
         if(hasReturn) {
-            ret.stack.ptrReg = RETVAL_REG;
-            ret.stack.sizeInBytes = func->returnType->getSizeInBytes();
+            int retReg = temp;
+            temp = retReg + 1;
+
+            gen.add(retReg, RETVAL_REG, 0);
+
+            if(func->returnType->getSizeInBytes() > 4) {
+                // the pointer to return value is in RETVAL_REG
+                ret.type = TempStorage::STACK;
+                ret.stack.ptrReg = retReg;
+                ret.stack.sizeInBytes = func->returnType->getSizeInBytes();
+            } else {
+                ret.type = TempStorage::REG;
+                ret.reg = retReg;
+            }
         }
 
         // Pop args
@@ -665,10 +673,11 @@ private:
             if(value) {
                 auto val = compileTerm(table, *value, gen);    
 
-                // Copy the return value into the stack memory pointed at by RETVAL_REG
                 if(val.type == TempStorage::REG) {
-                    gen.sw(val.reg, 0, RETVAL_REG);
+                    // Just set the ret val reg to be the value
+                    gen.add(RETVAL_REG, val.reg, 0);
                 } else {
+                    // Copy the return value into the stack memory pointed at by RETVAL_REG
                     int temp = curReg++;
 
                     for(int i = 0; i < val.stack.sizeInBytes; i += 4) {
@@ -677,6 +686,12 @@ private:
                     }
 
                     curReg = temp;
+                }
+
+                if(val.type == TempStorage::REG) {
+                    curReg = val.reg;
+                } else {
+                    curReg = val.stack.ptrReg;
                 }
             }
 

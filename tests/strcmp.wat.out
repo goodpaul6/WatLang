@@ -1,6 +1,6 @@
 ASSERTION FAILED:
 File:
-
+tests/strcmp.wat
 Line:
 5
 Message:

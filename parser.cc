@@ -148,18 +148,10 @@ class Parser
 
                 StructConstructorAST::Initializers inits;
 
-                while(curTok != '}') {
-                    expectToken(TOK_ID, "Expected identifier in struct constructor.");
-
-                    name = lexer.getLexeme();
-
-                    curTok = lexer.getToken(s);
-
-                    eatToken(s, '=', "Expected '=' after " + name + " in struct constructor");
-
+                while(curTok != '}') { 
                     auto rhs = parseExpr(table, s);
 
-                    inits.emplace_back(std::make_pair(std::move(name), std::move(rhs)));
+                    inits.emplace_back(std::move(rhs));
                 }
 
                 curTok = lexer.getToken(s);
