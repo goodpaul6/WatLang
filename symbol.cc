@@ -14,7 +14,7 @@ struct Var
     std::string name;
 
     Func* func;
-    int loc;    // Initialized to -1; could store register index or memory location as determined by compiler
+    int loc;    // stores memory location relative to base pointer ($29) as determined by compiler; -1 = uninitialized
     
     const Typetag* typetag;
 };
@@ -26,8 +26,6 @@ struct Func
 
     std::vector<Var> args;
     std::vector<Var> locals;
-
-    int firstReg; // First unused register (after registers for arguments and locals have been allocated), -1 by default, assigned by compiler
 
     const Typetag* returnType;
 };
@@ -48,7 +46,7 @@ struct SymbolTable
             }
         }
 
-        funcs.emplace_back(Func{std::move(pos), std::move(name), {}, {}, -1, nullptr});
+        funcs.emplace_back(Func{std::move(pos), std::move(name), {}, {}, nullptr});
         return funcs.back();
     }
 

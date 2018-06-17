@@ -25,12 +25,77 @@ struct Instruction
         return static_cast<Type>((word >> 28) & 0xf);
     }
 
-    uint8_t getS() const { return (word >> 23) & 0x1f; }
-    uint8_t getT() const { return (word >> 18) & 0x1f; }
-    uint8_t getD() const { return (word >> 13) & 0x1f; }
+    int getS() const { return (word >> 23) & 0x1f; }
+    int getT() const { return (word >> 18) & 0x1f; }
+    int getD() const { return (word >> 13) & 0x1f; }
 
     int16_t getImm() const { return word & 0xffff; }
 };
+
+std::ostream& operator<<(std::ostream& s, const Instruction& i)
+{
+    s << "(" << i.word << ") ";
+
+    switch(i.getType()) {
+        case Instruction::LIS: {
+            s << "lis $" << i.getD();
+        } break;
+
+        case Instruction::ADD: {
+            s << "add $" << i.getD() << ", $" << i.getS() << ", $" << i.getT();
+        } break;
+
+        case Instruction::SUB: {
+            s << "sub $" << i.getD() << ", $" << i.getS() << ", $" << i.getT();
+        } break;
+
+        case Instruction::MULT: {
+            s << "mult $" << i.getS() << ", $" << i.getT();
+        } break;
+
+        case Instruction::DIV: {
+            s << "div $" << i.getS() << ", $" << i.getT();
+        } break;
+
+        case Instruction::SLT: {
+            s << "slt $" << i.getD() << ", $" << i.getS() << ", $" << i.getT();
+        } break;
+
+        case Instruction::MFHI: {
+            s << "mfhi $" << i.getD();
+        } break;
+
+        case Instruction::MFLO: {
+            s << "mflo $" << i.getD();
+        } break;
+
+        case Instruction::LW: {
+            s << "lw $" << i.getT() << ", " << i.getImm() << "($" << i.getS() << ")";
+        } break;
+
+        case Instruction::SW: {
+            s << "sw $" << i.getT() << ", " << i.getImm() << "($" << i.getS() << ")";
+        } break;
+
+        case Instruction::BEQ: {
+            s << "beq $" << i.getS() << ", $" << i.getT() << ", " << i.getImm();
+        } break;
+
+        case Instruction::BNE: {
+            s << "beq $" << i.getS() << ", $" << i.getT() << ", " << i.getImm();
+        } break;
+
+        case Instruction::JR: {
+            s << "jr $" << i.getS();
+        } break;
+
+        case Instruction::JALR: {
+            s << "jalr $" << i.getS();
+        } break;
+    }
+
+    return s;
+}
 
 void run(const Instruction* code, size_t codeSize)
 {    

@@ -30,17 +30,50 @@ struct Compiler
     }
 
 private:
+    struct TempStorage
+    {
+        enum Type { REG, STACK } type;
+
+        union
+        {
+            int reg;
+            struct
+            {
+                int ptrReg;
+                int sizeInBytes;
+            } stack;
+        };
+
+        TempStorage() = default;
+
+        explicit TempStorage(int reg) : type{REG} { this->reg = reg; }
+        explicit TempStorage(int ptrReg, int sizeInBytes) :
+            type{STACK}
+        {
+            stack.ptrReg = ptrReg;
+            stack.sizeInBytes = sizeInBytes;
+        }
+    };
+
     int curReg = 1;
     int labelIndex = 0;
 
     // The function we are compiling rn
     Func* curFunc = nullptr;
 
-    // TODO(Apaar): Actually, we probably don't always want to put retval in a single register
-    // because you could have multiple calls in a single statement. We'll return the register
-    // into which the result of the function call is returned. Get rid of this once that's set up
-    const int RETVAL_REG = 29;
- 
+    // This register stores the PC of the calling function
+    const int LINK_REG = 31;
+
+    // Stack pointer
+    const int STACK_REG = 30;
+
+    // This is the base pointer register
+    const int BASE_REG = 29;
+
+    // This register is set to a memory location on the stack large enough
+    // to accomodate the return value
+    const int RETVAL_REG = 28;
+
     std::string uniqueLabel()
     {
         return "L" + std::to_string(labelIndex++);
@@ -51,7 +84,7 @@ private:
     {
         // We keep track of return-to-os address
         gen.lis(29, "exitAddrGlobalXXXX");
-        gen.sw(31, 0, 29);
+        gen.sw(LINK_REG, 0, 29);
 
         gen.lis(29, "main");
         gen.jr(29);
@@ -70,35 +103,42 @@ private:
             // null-terminator
             gen.word(0);
         }
-     
+
         gen.labelHere("exitAddrGlobalXXXX");
         gen.word(0);
 
         for(auto& f : table.funcs) {
-            auto reg = 1;
-
-            for(auto& v : f.args) {
-                if(reg >= RETVAL_REG) {
-                    throw PosError{v.pos, "Function " + f.name + " takes too many arguments."};
-                }
-
-                v.loc = reg++;
-            }
+            // Since the stack grows downwards these values are located positively relative to the base pointer
+            auto spaceUsed = 0;
+            auto cur = 0;
 
             for(auto& v : f.locals) {
-                if(reg >= RETVAL_REG) {
-                    throw PosError{v.pos, "Function " + f.name + " has too many locals."};
-                }
-
-                v.loc = reg++;
+                spaceUsed += v.typetag->getSizeInBytes();
             }
 
-            // NOTE(Apaar): We use firstReg - 1 to store return value
-            f.firstReg = reg + 1;
+            cur = spaceUsed;
+
+            for(auto& v : f.locals) {
+                cur -= v.typetag->getSizeInBytes();
+                v.loc = cur;
+            }
+
+            // Args are higher than locals in the stack because
+            // they're pushed before the function is entered
+            for(auto& v : f.args) {
+                spaceUsed += v.typetag->getSizeInBytes();
+            }
+
+            cur = spaceUsed;
+
+            for(auto& v : f.args) { 
+                cur -= v.typetag->getSizeInBytes();
+                v.loc = cur;
+            }
         }
     }
 
-    int compileCall(SymbolTable& table, CallAST& ast, Codegen& gen)
+    bool compileCall(SymbolTable& table, CallAST& ast, Codegen& gen, TempStorage& ret)
     {
         auto func = table.getFunc(ast.getFuncName());
 
@@ -109,78 +149,90 @@ private:
         if(ast.getArgs().size() != func->args.size()) {
             throw PosError{ast.getPos(), "Incorrect amount of arguments supplied to " + ast.getFuncName() + "; expected " + std::to_string(func->args.size())};
         }
-        
-        int spaceUsed = 0;
 
-        // Store all the registers in use so far
-        for(int i = 1; i < curReg; ++i) {
-            spaceUsed += 4;
-            gen.sw(i, -spaceUsed, 30);
-        }
- 
-        int prev = curReg;
-
-        // We'll use registers which are not in use by the function
-        // to store our temp args (because even if we stored them, when
-        // this call is being compiled, temporary values are being stored
-        // in them)
-        curReg = std::max(func->firstReg, curFunc ? curFunc->firstReg : 0);
+        bool hasReturn = func->returnType->tag != Typetag::VOID;
 
         int temp = curReg++;
 
-        gen.lis(temp, spaceUsed);
-        gen.sub(30, 30, temp);
+        // TODO(Apaar): If the return value is 4 bytes wide, just store it in the retval
+        // register; don't bother allocating stack space
+
+        if(hasReturn) {
+            // Make room for the return value
+            gen.lis(temp, func->returnType->getSizeInBytes());
+            gen.sub(STACK_REG, STACK_REG, temp);
+            gen.add(RETVAL_REG, STACK_REG, 0);
+        }
 
         curReg = temp;
 
-        // compile and assign arguments to the correct registers
-        
-        auto i = 0u;
-        for(auto& arg : ast.getArgs()) {
-            int reg = compileTerm(table, *arg, gen);
-            
-            gen.add(func->args[i].loc, reg, 0);
+        // Store all current registers (required for correctness of expressions e.g. 1 + call())
 
-            // We are free to stomp that register now
-            curReg = reg;
-            i += 1;
+        int numRegsStored = curReg;
+
+        for(int i = 1; i < numRegsStored; ++i) {
+            gen.sw(i, -i * 4, STACK_REG);
         }
 
-        // Jump into the function  
-        temp = std::max(func->firstReg, curFunc ? curFunc->firstReg : 0);
+        curReg = temp + 1;
 
+        gen.lis(temp, numRegsStored * 4);
+        gen.sub(STACK_REG, STACK_REG, temp);
+    
+        auto sizeSoFar = 0;
+        
+        for(auto& arg : ast.getArgs()) {
+            auto val = compileTerm(table, *arg, gen);
+
+            sizeSoFar += arg->getTag()->getSizeInBytes();
+
+            // We only need to push the arg on the stack if its not already there
+            if(val.type == TempStorage::REG) {
+                gen.sw(val.reg, -sizeSoFar, STACK_REG); 
+
+                // Since we push the arg to the stack, we can stomp the reg
+                curReg = val.reg;
+            } else {
+                curReg = val.stack.ptrReg;
+            }
+        }
+
+        gen.lis(temp, sizeSoFar);
+        gen.sub(STACK_REG, STACK_REG, temp);
+
+        // Args are loaded onto the stack, do the call
         gen.lis(temp, func->name);
         gen.jalr(temp);
 
-        curReg = prev;
+        // If it returned anything, the pointer to it is in RETVAL_REG
+        if(hasReturn) {
+            ret.stack.ptrReg = RETVAL_REG;
+            ret.stack.sizeInBytes = func->returnType->getSizeInBytes();
+        }
 
-        // Move return value (could be garbage if there is none) into temp reg
-        gen.add(curReg++, func->firstReg - 1, 0);
-
-        temp = curReg++;
+        // Pop args
+        gen.lis(temp, sizeSoFar);
+        gen.add(STACK_REG, STACK_REG, temp);
 
         // Restore regs
-        gen.lis(temp, spaceUsed);
-        gen.add(30, 30, temp);
+        gen.lis(temp, numRegsStored * 4);
+        gen.add(STACK_REG, STACK_REG, temp); 
+
+        for(int i = 1; i < numRegsStored; ++i) {
+            gen.lw(i, -i * 4, STACK_REG);
+        }
 
         curReg = temp;
 
-        // -2 because we used an extra register to store the return value (but we didn't save that register)
-        for(int i = curReg - 2; i >= 1; --i) {
-            gen.lw(i, -spaceUsed, 30);
-            spaceUsed -= 4;
-        }
-
-        return curReg - 1;
+        return hasReturn;
     }
-    
-    // Returns the register index into which the term's result is stored
-    int compileTerm(SymbolTable& table, AST& ast, Codegen& gen, const Typetag* targetType = nullptr)
+
+    TempStorage compileTerm(SymbolTable& table, AST& ast, Codegen& gen)
     {
         if(ast.getType() == AST::INT || ast.getType() == AST::BOOL || ast.getType() == AST::CHAR) {
-			gen.lis(curReg++, static_cast<int32_t>(static_cast<const IntAST&>(ast).getValue()));
+            gen.lis(curReg++, static_cast<int32_t>(static_cast<const IntAST&>(ast).getValue()));
 
-            return curReg - 1;
+            return TempStorage{curReg - 1};
         } else if(ast.getType() == AST::ARRAY || ast.getType() == AST::ARRAY_STRING) {
             auto startLabel = uniqueLabel();
             auto endLabel = uniqueLabel();
@@ -189,9 +241,9 @@ private:
             gen.jr(curReg - 1);
 
             gen.labelHere(startLabel);
-            
+
             auto& a = static_cast<const ArrayAST&>(ast);
-    
+
             if(a.getLength() == 0) {
                 throw PosError{ast.getPos(), "Size of array literal must be > 0."};
             }
@@ -209,47 +261,70 @@ private:
             gen.labelHere(endLabel);
             gen.lis(curReg - 1, startLabel);
 
-            return curReg - 1;
+            return TempStorage{curReg - 1};
         } else if(ast.getType() == AST::PAREN) {
             return compileTerm(table, static_cast<ParenAST&>(ast).getInner(), gen);
         } else if(ast.getType() == AST::ID) {
             auto idAst = static_cast<IdAST&>(ast);
             auto var = table.getVar(idAst.getName(), curFunc);
-            
+
             if(!var) {
                 throw PosError{ast.getPos(), "Referencing undeclared identifier " + idAst.getName()};
             }
 
-            if(var->func) {
-                // HAHA no can't depend on this being saved properly when you're calling a function for example
-                // return var->loc;
+            int baseReg = var->func ? BASE_REG : 0;
+            int sizeInBytes = var->typetag->getSizeInBytes();
 
-                // We move it into a temp reg we know works and then use that
-                gen.add(curReg++, var->loc, 0);
-                return curReg - 1;
-            } else {
-                gen.lw(curReg++, var->loc, 0); 
-                return curReg - 1;
+            if(sizeInBytes == 4) {
+                gen.lw(curReg++, var->loc, baseReg);
+                return TempStorage{curReg - 1};
             }
+
+            int temp = curReg++;
+
+            // Copy the struct onto the stack
+            for(int i = 0; i < sizeInBytes; sizeInBytes += 4) {
+                gen.lw(temp, var->loc + i, baseReg);
+                gen.sw(temp, -i - 4, STACK_REG);
+            }
+
+            gen.lis(temp, sizeInBytes);
+            gen.sub(STACK_REG, STACK_REG, temp);
+
+            // This reg will be the pointer to the value
+            gen.add(temp, STACK_REG, 0);
+
+            return TempStorage{temp, sizeInBytes};
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<CallAST&>(ast);
 
-            return compileCall(table, cst, gen);
+            TempStorage val;
+
+            auto result = compileCall(table, cst, gen, val);
+
+            // Typer should've made sure that this wasn't returning void
+            assert(result);
+
+            return val;
         } else if(ast.getType() == AST::STR) {
             gen.lis(curReg++, table.getString(static_cast<StrAST&>(ast).getId()).loc);
-            return curReg - 1;
+            return TempStorage{curReg - 1};
         } else if(ast.getType() == AST::UNARY) {
-            int reg = compileTerm(table, static_cast<UnaryAST&>(ast).getRhs(), gen);
+            auto val = compileTerm(table, static_cast<UnaryAST&>(ast).getRhs(), gen);
+
+            // Typer should make sure this is something that can be negated (an int, which
+            // fits in a reg) or dereferenced (a pointer, also fits in a reg)
+            assert(val.type == TempStorage::REG);
 
             switch(static_cast<UnaryAST&>(ast).getOp()) {
                 case '-': {
-                    gen.sub(curReg++, 0, reg);
-                    return curReg - 1;
+                    gen.sub(curReg++, 0, val.reg);
+                    return TempStorage{curReg - 1};
                 } break;
 
                 case '*': {
-                    gen.lw(curReg++, 0, reg);
-                    return curReg - 1;
+                    gen.lw(curReg++, 0, val.reg);
+                    return TempStorage{curReg - 1};
                 } break;
             }
         } else if(ast.getType() == AST::CAST) {
@@ -262,8 +337,15 @@ private:
 
         int dest = curReg++;
 
-        int a = compileTerm(table, bst.getLhs(), gen);
-        int b = compileTerm(table, bst.getRhs(), gen);
+        auto as = compileTerm(table, bst.getLhs(), gen);
+        auto bs = compileTerm(table, bst.getRhs(), gen);
+
+        // Similar to above, Typer should make sure lhs and rhs fit into regs
+        assert(as.type == TempStorage::REG);
+        assert(bs.type == TempStorage::REG);
+
+        auto a = as.reg;
+        auto b = bs.reg;
 
         switch(bst.getOp()) {
             case '+': gen.add(dest, a, b); break;
@@ -356,18 +438,17 @@ private:
 
         curReg = dest + 1;
 
-        return dest;
+        return TempStorage{dest};
     }
 
     void compileRestoreLinkAndSp(Codegen& gen)
     {
-        int temp = curReg++;
+        // Reset back to base pointer
+        gen.add(STACK_REG, BASE_REG, 0);
 
-        gen.lis(temp, 4);
-        gen.add(30, 30, temp);
-        gen.lw(31, -4, 30);
-
-        curReg = temp;
+        // The link reg and the previous base reg are stored after the base pointer, so we can retrieve them now
+        gen.lw(LINK_REG, -4, STACK_REG);
+        gen.lw(BASE_REG, -8, STACK_REG);
     }
 
     void compileStatement(SymbolTable& table, AST& ast, Codegen& gen)
@@ -375,7 +456,7 @@ private:
         if(ast.getType() == AST::BIN) {
             auto& bst = static_cast<BinAST&>(ast);
 
-            int reg = compileTerm(table, bst.getRhs(), gen);
+            auto val = compileTerm(table, bst.getRhs(), gen);
 
             auto& lhs = bst.getLhs();
 
@@ -388,25 +469,62 @@ private:
                     throw PosError{ast.getPos(), "Attempted to reference undeclared identifier " + name};
                 }
 
-                if(!var->func) {
-                    gen.sw(reg, var->loc, 0);
+                int baseReg = var->func ? BASE_REG : 0;
+                int sizeInBytes = var->typetag->getSizeInBytes();
+  
+                if(val.type == TempStorage::REG) {
+                    gen.sw(val.reg, var->loc, baseReg);
                 } else {
-                    gen.add(var->loc, reg, 0);
+                    // Typer should make sure rhs has same size as lhs
+                    assert(val.stack.sizeInBytes == sizeInBytes);
+
+                    int temp = curReg++;
+
+                    for(int i = 0; i < sizeInBytes; i += 4) {
+                        gen.lw(temp, i, val.stack.ptrReg);
+                        gen.sw(temp, var->loc + i, BASE_REG);
+                    }
+
+                    curReg = temp;
                 }
             } else {
                 assert(lhs.getType() == AST::UNARY);
-                
+
                 auto& ust = static_cast<UnaryAST&>(lhs);
 
                 assert(ust.getOp() == '*');
 
-                int lreg = compileTerm(table, ust.getRhs(), gen);
+                auto lval = compileTerm(table, ust.getRhs(), gen);
 
-                gen.sw(reg, 0, lreg);
+                // Pointers ought to fit into registers
+                assert(lval.type == TempStorage::REG);
+
+                int lreg = lval.reg;
+                int sizeInBytes = ust.getRhs().getTag()->getSizeInBytes();
+
+                if(val.type == TempStorage::REG) {
+                    gen.sw(val.reg, 0, lreg);
+                } else {
+                    // Typer should make sure rhs has same size as lhs
+                    assert(val.stack.sizeInBytes == sizeInBytes);
+
+                    int temp = curReg++;
+
+                    for(int i = 0; i < sizeInBytes; i += 4) {
+                        gen.lw(temp, i, val.stack.ptrReg);
+                        gen.sw(temp, i, lreg);
+                    }
+
+                    curReg = temp;
+                }
             }
 
             // We're done with this register now that it's stored
-            curReg = reg;
+            if(val.type == TempStorage::REG) {
+                curReg = val.reg;
+            } else {
+                curReg = val.stack.ptrReg;
+            }
         } else if(ast.getType() == AST::BLOCK) {
             for(auto& a : static_cast<BlockAST&>(ast).getAsts()) {
                 compileStatement(table, *a, gen);
@@ -416,7 +534,12 @@ private:
 
             int prevReg = curReg;
 
-            int cond = compileTerm(table, ist.getCond(), gen);
+            auto condVal = compileTerm(table, ist.getCond(), gen);
+
+            // Booleans must fit in a register
+            assert(condVal.type == TempStorage::REG);
+
+            auto cond = condVal.reg;
 
             auto altLabel = uniqueLabel();
             auto endLabel = uniqueLabel();
@@ -447,7 +570,12 @@ private:
 
             gen.labelHere(condLabel);
 
-            int cond = compileTerm(table, ist.getCond(), gen);
+            auto condVal = compileTerm(table, ist.getCond(), gen);
+            
+            // Booleans must fit in regs
+            assert(condVal.type == TempStorage::REG);
+
+            auto cond = condVal.reg;
 
             auto endLabel = uniqueLabel();
 
@@ -465,57 +593,95 @@ private:
             gen.labelHere(endLabel);
         } else if(ast.getType() == AST::FUNC) {
             auto& fst = static_cast<FuncAST&>(ast);
-        
-            curFunc = table.getFunc(fst.getName());
-            
-            assert(curFunc);
 
-            int temp = curReg++;
+            curFunc = table.getFunc(fst.getName());
+
+            assert(curFunc);
 
             gen.labelHere(curFunc->name);
 
-            // We can only use registers from firstReg onwards
-            int prev = curReg;
+            // Make sure that we've reset curReg
+            assert(curReg == 1);
 
-            curReg = curFunc->firstReg;
+            // We can use all registers from 1 onwards
+            curReg = 1;
 
-            temp = curReg++;
+            int temp = curReg++;
 
-            gen.sw(31, -4, 30);
-            gen.lis(temp, 4);
-            gen.sub(30, 30, temp);
+            auto localsSize = 0;
+
+            for(auto& v : curFunc->locals) {
+                localsSize += v.typetag->getSizeInBytes();
+            }
+
+            if(localsSize > 0) {
+                // Make room for local variables
+                gen.lis(temp, localsSize);
+                gen.sub(STACK_REG, STACK_REG, temp);
+            }
+            
+            // Push the link and base pointer regs (for nested func calls)
+            gen.sw(LINK_REG, -4, STACK_REG);
+            gen.sw(BASE_REG, -8, STACK_REG);
+            
+            // Set the base pointer to the stack pointer
+            gen.add(BASE_REG, STACK_REG, 0);
+
+            gen.lis(temp, 8);
+            gen.sub(STACK_REG, STACK_REG, temp);
 
             compileStatement(table, fst.getBody(), gen);
 
-            // We are free to stop these regs now that the body of the function has been passed
-            curReg = prev;
+			curReg = temp;
+
+            assert(curReg == 1);
 
             compileRestoreLinkAndSp(gen);
-
-            gen.jr(31);
+            gen.jr(LINK_REG);
 
             curFunc = nullptr;
         } else if(ast.getType() == AST::CALL) {
             auto& cst = static_cast<CallAST&>(ast);
 
-            // Ignore return value
-            curReg = compileCall(table, cst, gen);
+            TempStorage val;
+
+            auto hasReturn = compileCall(table, cst, gen, val);
+
+            if(hasReturn) {
+                // Discard return value
+                if(val.type == TempStorage::REG) {
+                    curReg = curReg > val.reg ? val.reg : curReg;
+                } else {
+                    curReg = curReg > val.stack.ptrReg ? val.stack.ptrReg : curReg;
+                }
+            }
         } else if(ast.getType() == AST::RETURN) {
             if(!curFunc) {
                 throw PosError{ast.getPos(), "You're trying to return but you're not inside a function. Think about that for a second."};
             }
 
             auto value = static_cast<ReturnAST&>(ast).getValue();
-        
-            if(value) {
-                int res = compileTerm(table, *value, gen);
 
-                // Move the result into return value register
-                gen.add(curFunc->firstReg - 1, res, 0);
+            if(value) {
+                auto val = compileTerm(table, *value, gen);    
+
+                // Copy the return value into the stack memory pointed at by RETVAL_REG
+                if(val.type == TempStorage::REG) {
+                    gen.sw(val.reg, 0, RETVAL_REG);
+                } else {
+                    int temp = curReg++;
+
+                    for(int i = 0; i < val.stack.sizeInBytes; i += 4) {
+                        gen.lw(temp, i, val.stack.ptrReg);
+                        gen.sw(temp, i, RETVAL_REG);
+                    }
+
+                    curReg = temp;
+                }
             }
 
             compileRestoreLinkAndSp(gen);
-            gen.jr(31);
+            gen.jr(LINK_REG);
         } else if(ast.getType() == AST::ASM) {
             gen.parse(ast.getPos(), static_cast<AsmAST&>(ast).getCode());
         } else {

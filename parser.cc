@@ -87,7 +87,7 @@ class Parser
     {
         std::unique_ptr<AST> lhs;
 
-        if(curTok == '-' || curTok == '*') {
+        if(curTok == '-' || curTok == '*' || curTok == '&') {
             auto pos = lexer.getPos();
 
             int op = curTok;
@@ -132,7 +132,7 @@ class Parser
 
             curTok = lexer.getToken(s);
 
-            if(curTok != '(') {
+            if(curTok != '(' && curTok != '{') {
                 auto var = table.getVar(name, curFunc);
                 
                 if(!var) {
@@ -140,6 +140,31 @@ class Parser
                 }  
 
                 lhs.reset(new IdAST{pos, std::move(name)});
+            } else if(curTok == '{') {
+                // Struct constructor
+                auto structTag = table.getStruct(pos, name);
+
+                curTok = lexer.getToken(s);
+
+                StructConstructorAST::Initializers inits;
+
+                while(curTok != '}') {
+                    expectToken(TOK_ID, "Expected identifier in struct constructor.");
+
+                    name = lexer.getLexeme();
+
+                    curTok = lexer.getToken(s);
+
+                    eatToken(s, '=', "Expected '=' after " + name + " in struct constructor");
+
+                    auto rhs = parseExpr(table, s);
+
+                    inits.emplace_back(std::make_pair(std::move(name), std::move(rhs)));
+                }
+
+                curTok = lexer.getToken(s);
+
+                lhs.reset(new StructConstructorAST{std::move(pos), std::move(inits), structTag});
             } else { 
                 lhs = parseCall(pos, table, std::move(name), s);
             }

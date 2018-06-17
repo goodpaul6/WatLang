@@ -21,7 +21,8 @@ struct AST
         PAREN,
         CAST,
         ARRAY,
-        ARRAY_STRING
+        ARRAY_STRING,
+        STRUCT_CONSTRUCTOR
     };
 
     AST(Type type, Pos pos) : type{type}, pos{pos} {}
@@ -207,4 +208,17 @@ struct ArrayAST : public AST
 private:
     int length;
     std::vector<int> values;
+};
+
+struct StructConstructorAST : public AST
+{
+    using Initializers = std::vector<std::pair<std::string, std::unique_ptr<AST>>>; 
+    StructConstructorAST(Pos pos, Initializers inits, const Typetag* structTag) : AST{STRUCT_CONSTRUCTOR, pos}, inits{std::move(inits)} {}
+
+    Initializers& getInits() { return inits; }
+    const Typetag* getStruct() const { return structTag; }
+
+private:
+    const Typetag* structTag;
+    Initializers inits;
 };

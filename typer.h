@@ -42,7 +42,7 @@ struct Typetag
         }
     }
 
-    int getSizeInWords() const
+    int getSizeInBytes() const
     {
         switch(tag) {
             case VOID: assert(0); return 0; break;
@@ -51,13 +51,13 @@ struct Typetag
                 int totalSize = 0;
 
                 for(auto& field : structFields) {
-                    totalSize += field.second->getSizeInWords();
+                    totalSize += field.second->getSizeInBytes();
                 }
 
                 return totalSize;
             } break;
 
-            default: return 1;
+            default: return 4;
         }
     }
 };

@@ -2,12 +2,6 @@
 
 #include "typer.h"
 
-// To Apaar in the morning or whenever
-// I was setting this up so that it caches
-// types in the AST directly for later reference.
-// While it's doing that, it also does all the type checking
-// it needs to. This way we can use type information
-// easily in the compiler.
 struct Typer
 {
     void resolveTypes(SymbolTable& table, AST& ast)

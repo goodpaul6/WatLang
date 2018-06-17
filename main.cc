@@ -44,6 +44,13 @@ int main(int argc, char** argv)
 
         auto code = gen.getPatchedCode();
 
+        auto pc = 0u;
+
+        for(auto i : code) {
+            cout << pc << ": " << i << "\n";
+            pc += 4;
+        }
+
         run(&code[0], code.size() * sizeof(Instruction));
     } catch(const PosError& e) {
         if(e.getPos().filename.empty()) {
