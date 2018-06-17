@@ -26,23 +26,24 @@ func getc() : char {
 }
 
 func putc(c : char) : void {
-    asm "lis $3";
-    asm ".word 0xffff000c";
-    asm "sw $1 0($3)";
+    *cast(*char) 0xffff000c = c;
 }
 
 func puts(s : *char) : void {
-    asm "lis $3";
+    // Load the char pointer
+    asm "lw $1 0($29)";
+
+    asm "lis $2";
     asm ".word 0xffff000c";
 
-    asm "lis $5";
+    asm "lis $3";
     asm ".word 4";
 
     asm "putsLoop:";
     asm "lw $4 0($1)";
     asm "beq $4 $0 putsEnd";
-    asm "sw $4 0($3)";
-    asm "add $1 $1 $5";
+    asm "sw $4 0($2)";
+    asm "add $1 $1 $3";
     asm "lis $4";
     asm ".word putsLoop";
     asm "jr $4";
